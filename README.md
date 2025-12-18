@@ -3,11 +3,11 @@
 >  **Note to Admissions Committee:** This repository outlines my long-term research interest in AI Alignment and Neuro-AI. 
 > 
 >  **For my implemented computational modeling work (Active Inference & DDM) cited in my application, please visit my primary repository:** > 
-> **[📂 Modeling Attention Shift via Active Inference](https://github.com/XXXYUPuzhi/active-inference-attention-model)**
+> **[ Modeling Attention Shift via Active Inference](https://github.com/XXXYUPuzhi/active-inference-attention-model)**
 
 ---
 
-## 📖 Concept Overview
+##  Concept Overview
 Current Transformer architectures (like GPT) lack the energy efficiency and adaptive attention mechanisms found in biological brains. 
 
 **"Brain-Constrained Transformer"** is my proposed research direction for the Master's program. It aims to integrate biological constraints into the Transformer architecture to improve **AI Alignment** and **Interpretability**.
