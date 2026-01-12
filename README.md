@@ -6,11 +6,17 @@
 
 ## 📖 Overview
 
-This repository contains the implementation of a **Transformer-based baseline model** designed to decode and predict primate movement decisions in a Pacman maze task. By leveraging a Vision Transformer (ViT) architecture, we aim to capture global spatial context and decision strategies from game frames.
+Current AI models predominantly scale performance by increasing parameters, whereas the biological brain accomplishes complex cognitive tasks under severe resource constraints. A key mechanism behind this biological efficiency is the decomposition of complex problems into **modular and hierarchical abstract structures**, which simultaneously conserves resources and enhances processing efficiency.
 
-Beyond behavioral prediction, this project serves as a testbed for investigating the alignment between Artificial Neural Networks (ANNs) and biological neural activity (specifically in the Premotor cortex and FEF), bridging the gap between AI interpretability and neuroscience.
+**This research poses a fundamental question:**
+> *Can artificial neural networks (ANNs) spontaneously develop similar modular and hierarchical structures when subjected to analogous resource constraints?*
 
-> **Note:** This project is currently under active development. The codebase is being refined to support advanced modularity and hierarchical processing.
+[cite_start]To answer this, this repository leverages three key experimental resources: a highly structured **Pac-Man paradigm**, an interpretable **Transformer baseline model**, and multi-region **electrophysiological recordings**[cite: 3, 17, 37].
+
+### Key Research Objectives
+1.  [cite_start]**Structural Emergence via Constraints:** We implement computationally economical constraint methods to promote structure, including **Differentiable L0 Regularization** [cite: 19][cite_start], **Modified Mixture of Experts (MoE)** [cite: 20][cite_start], and **Hierarchical Convergence Models (HCM)**[cite: 23].
+2.  [cite_start]**Brain-AI Alignment:** We hypothesize that constrained models will develop internal representations more aligned with biological neural activity, verified via **Representational Similarity Analysis (RSA)** and **Single-Neuron Encoding Models**[cite: 32, 33].
+3.  [cite_start]**Bidirectional Interpretability:** By clustering the model's internal states, we aim to discover data-driven behavioral strategy modules that serve as novel labels to reinterpret primate behavior[cite: 34, 36].
 
 ---
 
