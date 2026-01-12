@@ -44,10 +44,7 @@ We rigorously evaluate the biological plausibility of our model using neural rec
 ### 1. Representational Similarity Analysis (RSA)
 We performed RSA between the **MLP2 layer of the Transformer’s CLS token** and the **premotor region** of the biological brain using cosine similarity.
 
-![RSA Analysis Result]
-
-
-
+![RSA Analysis Result](./images/RSA.png)
 *Figure 1: Representational Dissimilarity Matrices (RDMs) showing the alignment between model internal states and biological neural activity.*
 
 ### 2. Linear Decoding & Encoding Models
@@ -56,9 +53,7 @@ Different token embeddings were trained to predict activity within specific brai
 * **Metric:** Performance is quantified as $MSE - MSE_{shuffle}$ (significance $p < 0.05$).
 * **Finding:** The **CLS token** exhibits significantly higher accuracy when predicting neurons in the **Premotor cortex and Frontal Eye Fields (FEF)** compared to other tokens. This indicates that the CLS token effectively encodes the motor signal.
 
-![Decoding Accuracy]
-
-
+![Decoding Accuracy](./images/linear_encoder.png)
 *Figure 2: Decoding performance of different model components over time relative to joystick action.*
 
 ---
