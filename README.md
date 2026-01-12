@@ -18,6 +18,8 @@ To answer this, this repository leverages three key experimental resources: a hi
 2.  **Brain-AI Alignment:** We hypothesize that constrained models will develop internal representations more aligned with biological neural activity, verified via **Representational Similarity Analysis (RSA)** and **Single-Neuron Encoding Models**.
 3.  **Bidirectional Interpretability:** By clustering the model's internal states, we aim to discover data-driven behavioral strategy modules that serve as novel labels to reinterpret primate behavior.
 
+> **Note:** This project is currently under active development. The codebase is being refined to support advanced modularity and hierarchical processing.
+
 ---
 
 ## 🏗 Model Architecture
