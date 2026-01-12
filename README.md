@@ -1,7 +1,5 @@
 # Brain-Constrained Transformer (Research Vision)
 
-# Neuro-Nav Transformer: Primate Decision Modeling in Pacman
-
 [![Status](https://img.shields.io/badge/Status-Work_in_Progress-yellow)]()
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)]()
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)]()
