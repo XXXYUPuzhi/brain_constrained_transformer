@@ -52,7 +52,7 @@ We rigorously evaluate the biological plausibility of our model using neural rec
 ### 1. Representational Similarity Analysis (RSA)
 We performed RSA between the **MLP2 layer of the Transformer’s CLS token** and the **premotor region** of the biological brain using cosine similarity.
 
-![RSA Analysis Result](./images/RSA.png)
+![RSA Analysis Result](./images/RSA1.png)
 *Figure 1: Representational Dissimilarity Matrices (RDMs) showing the alignment between model internal states and biological neural activity.*
 
 ### 2. Linear Decoding & Encoding Models
