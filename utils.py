@@ -3,6 +3,7 @@
 Created on Sat Jul 15 13:15:14 2023
 
 @author: lzq19
+@contributor: Yu Puzhi (Code Optimization & Refactoring)
 """
 # In[]
 import pandas as pd
@@ -989,4 +990,5 @@ def generalized_simloss(tar, pred,mode='vanilla',temperature=1):
         mask = torch.triu(torch.ones_like(Q),diagonal=1).bool()
         loss = torch.sum(P[mask]*torch.log(P[mask]/Q[mask]))
         
+
     return loss
