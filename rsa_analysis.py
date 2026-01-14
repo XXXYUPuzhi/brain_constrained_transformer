@@ -3,6 +3,8 @@
 
 """
 RSA Analysis Tool (Single File Version)
+
+Author: Yu Puzhi
 =======================================
 A tool for performing Representational Similarity Analysis (RSA) on neural or model data.
 It calculates Representational Dissimilarity Matrices (RDMs) and compares them between
@@ -255,4 +257,5 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
+
     main()
