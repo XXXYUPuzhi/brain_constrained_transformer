@@ -66,6 +66,45 @@ Different token embeddings were trained to predict activity within specific brai
 
 ---
 
+## 🧠 Emergent Functional Structure: Modularity & Hierarchy
+
+To investigate how the model processes game states from perception to decision-making, we analyzed the **functional network topology** of the Transformer's feed-forward layers. We specifically tracked the **CLS Token**, which serves as the information bottleneck for the final action prediction.
+
+### 1. Methodology & Metrics
+
+We construct a connectivity matrix $A$ based on the pairwise Pearson correlation of neuron activations. The network structure is evaluated using two key metrics from complex network theory:
+
+* **Modularity ($Q$ Score):** Measures the degree of functional specialization into distinct neural clusters (modules).
+    $$Q = \frac{1}{m}\sum_{ij}\left[A_{ij} - \frac{k_i^{in}k_j^{out}}{m}\right]\sigma_{ci,cj}$$
+    *Where $A_{ij}$ is the connection weight, $k$ is the node degree, $m$ is the total edge weight, and $\sigma$ indicates if nodes $i,j$ belong to the same module.*
+
+* **Hierarchy ($H$ Score):** Quantifies the recursive organization and influence heterogeneity of the network.
+    $$H = \frac{\sum_{i \in V}[C_R^{max} - C_R(i)]}{N-1}$$
+    *Where $C_R(i)$ represents the influence (reachability) of neuron $i$, indicating whether the layer relies on a few "hub" neurons or is democratically organized.*
+
+### 2. Visualization: Topological Evolution
+
+The graphs below illustrate the functional connectivity of the CLS token in Layer 1 vs. Layer 2. Nodes represent neurons, and edges represent strong functional correlations (Top-20%). Colors indicate detected community modules.
+
+| **Layer 1: Information Integration** | **Layer 2: Decision Disentanglement** |
+| :---: | :---: |
+| ![Layer 1 Graph](./path/to/your/layer1_cls_graph.png) | ![Layer 2 Graph](./path/to/your/layer2_cls_graph.png) |
+| *High connectivity with a **Single Super-Cluster**. The model integrates global spatial features into a unified context representation.* | *Structure disperses into **Three Distinct Modules**. The model disentangles the context into orthogonal decision factors (e.g., Combat, Territory, Safety).* |
+
+### 3. Quantitative Analysis
+
+| Metric | Layer 1 (CLS) | Layer 2 (CLS) | Interpretation |
+| :--- | :--- | :--- | :--- |
+| **Modularity ($Q$)** | **0.8294** | **0.8274** | Consistently high modularity indicates the model maintains specialized "neural experts" throughout processing. |
+| **Hierarchy ($H$)** | **0.4545** | **0.4545** | Stable hierarchical control suggests a consistent command structure where specific "hub" neurons coordinate information flow. |
+
+> **Key Insight:** While the quantitative metrics ($Q$ and $H$) remain stable, the **topological structure** undergoes a dramatic shift. 
+> 
+> * **Layer 1** exhibits a "Hub-and-Spoke" architecture centered around a large core group, suggesting **Context Integration** (merging stone positions, liberties, and shapes).
+> * **Layer 2** evolves into a "Multi-Polar" architecture with separated clusters. This suggests **Feature Orthogonalization**, where the model splits the integrated context into independent strategic components (e.g., *Attacking* vs. *Defending* vs. *Territory Expansion*) before the final linear projection to action space.
+
+---
+
 ## 🚀 Roadmap & Future Work
 
 We are currently extending the baseline with three major architectural improvements to test the hypothesis that **resource-constrained models develop more brain-like representations**.
