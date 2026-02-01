@@ -88,7 +88,7 @@ The graphs below illustrate the functional connectivity of the CLS token in Laye
 
 | **Layer 1: Information Integration** | **Layer 2: Decision Disentanglement** |
 | :---: | :---: |
-| ![Layer 1 Graph](./path/to/your/layer1_cls_graph.png) | ![Layer 2 Graph](./path/to/your/layer2_cls_graph.png) |
+| ![Layer 1 Graph](./images/layer1_modularity.png) | ![Layer 2 Graph](./images/layer2_modularity.png) |
 | *High connectivity with a **Single Super-Cluster**. The model integrates global spatial features into a unified context representation.* | *Structure disperses into **Three Distinct Modules**. The model disentangles the context into orthogonal decision factors (e.g., Combat, Territory, Safety).* |
 
 ### 3. Quantitative Analysis
