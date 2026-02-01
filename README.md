@@ -50,7 +50,7 @@ Following the Vision Transformer (ViT) design:
 We rigorously evaluate the biological plausibility of our model using neural recording data from primates.
 
 ### 1. Representational Similarity Analysis (RSA)
-We performed RSA between the **MLP2 layer of the Transformer’s CLS token** and the **premotor region** of the biological brain using cosine similarity.
+I performed RSA between the **MLP2 layer of the Transformer’s CLS token** and the **premotor region** of the biological brain using cosine similarity.
 
 ![RSA Analysis Result](./images/RSA1.png)
 *Figure 1: Representational Dissimilarity Matrices (RDMs) showing the alignment between model internal states and biological neural activity.*
@@ -68,11 +68,11 @@ Different token embeddings were trained to predict activity within specific brai
 
 ## 🧠 Emergent Functional Structure: Modularity & Hierarchy
 
-To investigate how the model processes game states from perception to decision-making, we analyzed the **functional network topology** of the Transformer's feed-forward layers. We specifically tracked the **CLS Token**, which serves as the information bottleneck for the final action prediction.
+To investigate how the model processes game states from perception to decision-making, I analyzed the **functional network topology** of the Transformer's feed-forward layers. I specifically tracked the **CLS Token**, which serves as the information bottleneck for the final action prediction.
 
 ### 1. Methodology & Metrics
 
-We construct a connectivity matrix $A$ based on the pairwise Pearson correlation of neuron activations. The network structure is evaluated using two key metrics from complex network theory:
+I construct a connectivity matrix $A$ based on the pairwise Pearson correlation of neuron activations. The network structure is evaluated using two key metrics from complex network theory:
 
 * **Modularity ($Q$ Score):** Measures the degree of functional specialization into distinct neural clusters (modules).
     $$Q = \frac{1}{m}\sum_{ij}\left[A_{ij} - \frac{k_i^{in}k_j^{out}}{m}\right]\sigma_{ci,cj}$$
