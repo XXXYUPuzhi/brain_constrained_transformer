@@ -105,34 +105,146 @@ The graphs below illustrate the functional connectivity of the CLS token in Laye
 
 ---
 
-## 🚀 Roadmap & Future Work
+## Resource Limitation Experiments: Results
 
-We are currently extending the baseline with three major architectural improvements to test the hypothesis that **resource-constrained models develop more brain-like representations**.
+We systematically tested whether imposing resource constraints on the 48d2h baseline model (2-layer, dim=48, 2 heads, ~44K parameters) induces more modular and specialized internal representations. Two forms of resource limitation were applied:
 
-### Phase 1: Differentiable L0 Regularization (Sparse Connectivity)
-* **Objective:** Implement a differentiable relaxation of the L0 norm.
-* **Goal:** Enable simultaneous optimization of model performance and parameter sparsity within the backpropagation framework.
+1. **L1 Weight Sparsity** with proximal gradient descent (lambda in {1e-5, ..., 1e-2})
+2. **Top-K Activation Sparsity** retaining only *k* of 192 MLP hidden neurons per forward pass (*k* in {8, 16, 32, 64, 96, 128})
 
-### Phase 2: Modified Mixture of Experts (MoE) (Sparse Activation)
-* **Objective:** Decompose the output layer into modular behavioral units.
-* **Mechanism:** Inspired by Schrum & Miikkulainen, each module will have specific policy neurons and a gating unit to regulate information flow.
+### Summary Table
 
-### Phase 3: Hierarchical Convergence Model (HCM)
-* **Objective:** Introduce a dual-speed architecture to solve the "rapid convergence" issue.
-    * **Low-level (L) module:** Updates rapidly to reach local equilibrium.
-    * **High-level (H) module:** Updates slowly, guiding the L-module via recurrent feedback.
-* **Expected Outcome:** Effective layered processing while maintaining global coherence.
+| | Baseline | TopK-8 | L1 (lambda=5e-4) |
+|:---|:---|:---|:---|
+| **Test Accuracy** | 81.67% | 81.44% (-0.2%) | 75.13% (-6.5%) |
+| **Layer 1 Modularity Q** | 0.35 | 0.46 (+0.11) | 0.54 (+0.19) |
+| **Max Ghost \|r\|** | 0.23 | 0.39 (+0.16) | 0.34 (+0.11) |
+| **Ghost Neurons (L1, \|r\|>0.2)** | 10 | 8 | 12 |
+| **Weight Sparsity** | 0% | 0% | 51.9% |
 
-### Hypothesis & Expected Impact
-1.  **Structural Emergence:** Resource constraints (L0 + MoE + HCM) will induce modular and hierarchical structures automatically.
-2.  **Brain-Alignment:** The constrained model will show significantly higher RSA scores with neural data compared to unconstrained models.
-3.  **Behavioral Discovery:** Clustering internal states will reveal data-driven "strategy modules," offering novel labels for interpreting primate behavior.
+### Complete Training Results
+
+| Condition | Best Acc (%) | @ Epoch | Final Acc (%) | Total Epochs | MLP Sparsity (%) |
+|:---|:---|:---|:---|:---|:---|
+| **Baseline** | **81.67** | 54 | 80.43 | 84 | 0.07 |
+| L1 lambda=1e-5 | 71.34 | 152 | 71.13 | 182 | 40.67 |
+| L1 lambda=5e-5 | 72.64 | 137 | 72.32 | 167 | 44.85 |
+| L1 lambda=1e-4 | 74.03 | 84 | 72.73 | 114 | 48.03 |
+| **L1 lambda=5e-4** | **75.13** | 153 | 74.58 | 183 | 51.72 |
+| L1 lambda=1e-3 | 73.31 | 188 | 72.87 | 218 | 55.41 |
+| L1 lambda=1e-2 | 72.32 | 109 | 71.89 | 139 | 82.80 |
+| **TopK k=8** | **81.44** | 63 | 80.69 | 93 | 0.05 |
+| TopK k=16 | 80.37 | 62 | 79.97 | 92 | 0.08 |
+| TopK k=32 | 81.15 | 106 | 80.14 | 136 | 0.07 |
+| TopK k=64 | 80.23 | 93 | 79.50 | 123 | 0.05 |
+| TopK k=96 | 80.78 | 154 | 79.30 | 184 | 0.03 |
+| TopK k=128 | 81.27 | 122 | 80.11 | 152 | 0.03 |
+
+### Structural Metrics: Baseline vs. TopK-8
+
+| Metric | Baseline | TopK-8 | Delta |
+|:---|:---|:---|:---|
+| Test Accuracy | 0.8167 | 0.8144 | -0.0023 |
+| **Layer 1 Modularity Q** | 0.3457 | **0.4571** | **+0.1114** |
+| Layer 2 Modularity Q | 0.7397 | 0.6392 | -0.1005 |
+
+### Key Findings
+
+**Top-K activation sparsity** (k=8) acts as a "soft routing" mechanism:
+* Near-zero accuracy cost (-0.2%)
+* Creates winner-take-all neuron selection with a small "core" of heavily-used neurons
+* Produces a ghost-specialized neuron (N69) that jointly encodes Pac-Man row position and ghost relative positions (r = 0.39)
+* Analogous to biological sparse coding under metabolic constraints
+
+**L1 weight sparsity** acts as a "network pruning" mechanism:
+* Substantial accuracy cost (-6.5%)
+* Physically removes connections (82.7% weight sparsity at lambda=1e-2)
+* Increases modularity more dramatically (+0.19 vs. +0.11)
+* Enhances action-related specialization in Layer 2 (|r| up to 0.50)
+* Increases inter-cluster ghost-distance diversity, hinting at strategic differentiation
+
+### Comparison Figures
+
+| Structural Metrics | Neuron Usage (TopK-8) |
+| :---: | :---: |
+| ![Structural Comparison](./comparison_results/figures/structural_comparison.png) | ![Neuron Usage](./comparison_results/figures/neuron_usage_frequency.png) |
+
+| Neuron-Feature Correlation (Layer 1) | Neuron-Feature Correlation (Layer 2) |
+| :---: | :---: |
+| ![Layer 1 Correlation](./comparison_results/figures/neuron_feature_corr_L1.png) | ![Layer 2 Correlation](./comparison_results/figures/neuron_feature_corr_L2.png) |
+
+| NMF Decomposition | Channel Ablation |
+| :---: | :---: |
+| ![NMF Comparison](./comparison_results/figures/nmf_comparison.png) | ![Ablation Comparison](./comparison_results/figures/ablation_comparison.png) |
+
+### Conclusion
+
+Resource limitation, in the form of Top-K activation sparsity and L1 weight sparsity, promotes functional specialization in a Vision Transformer trained to predict primate Pac-Man behavior. Top-K sparsity (k=8) achieves this with minimal accuracy cost (-0.2%) while producing ghost-specialized neurons and increasing network modularity. L1 sparsity achieves higher modularity (+0.19) but at a larger accuracy cost (-6.5%). These results support the hypothesis that resource constraints can drive neural networks toward more modular, interpretable representations, analogous to the functional specialization observed in biological neural circuits operating under metabolic constraints.
 
 ---
 
-## 🛠 Usage
+## Roadmap & Future Work
 
-*(Code usage instructions are currently being updated)*
+We are extending the baseline with additional architectural improvements to further test the hypothesis that **resource-constrained models develop more brain-like representations**.
+
+### Planned Experiments
+
+1. **Causal interventions:** Clamp/ablate specific neurons (e.g., N69 in TopK-8) and measure behavioral changes
+2. **Larger models:** Apply TopK/L1 to 64d4h (3-layer) models
+3. **Combined constraints:** Apply both L1 and TopK simultaneously
+4. **Temporal dynamics:** Analyze sparsification evolution using epoch snapshots
+5. **Neural comparison:** Compare resource-limited representations with primate neural recordings via RSA
+
+### Additional Architectural Directions
+
+* **Differentiable L0 Regularization** — Enable simultaneous optimization of performance and parameter sparsity
+* **Modified Mixture of Experts (MoE)** — Decompose the output layer into modular behavioral units with gating
+* **Hierarchical Convergence Model (HCM)** — Dual-speed architecture with fast low-level and slow high-level modules
+
+---
+
+## Usage
+
+### Training with Resource Limitation
+
+```bash
+# Baseline reproduction
+python train_resource_limited.py --reg none --layers 2 --dim 48 --heads 2
+
+# L1 regularization
+python train_resource_limited.py --reg l1 --lambda_l1 1e-4 --layers 2 --dim 48 --heads 2
+
+# Top-K activation sparsity
+python train_resource_limited.py --reg topk --topk_k 8 --layers 2 --dim 48 --heads 2
+```
+
+### Analysis
+
+```bash
+# Analyze a single model
+python analyze_resource_limited.py --model results/model_earlystop.pkl
+
+# Compare baseline vs. TopK
+python compare_baseline_topk.py \
+  --baseline results_48d2h/..._earlystop.pkl \
+  --topk results_48d2h/..._topk8_earlystop.pkl
+
+# Decode strategies from FFN activations
+python strategy_decode.py --sessions 140-144
+```
+
+### Run Full Experiment Suite
+
+```bash
+# All experiments (12d1h model)
+python run_all.py
+
+# All experiments (48d2h model)
+python run_all_48d2h.py
+
+# Or via shell script
+bash run_experiments.sh
+```
 
 ---
 *Created by Puzhi Yu*

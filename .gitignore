@@ -205,3 +205,21 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ── Project-specific: training data and model checkpoints ──
+# These are too large for version control
+*.pkl
+*.npy
+*.csv
+*.h5
+*.hdf5
+*.pt
+*.pth
+junction_predict_resortind/
+omega_models_fromcluster/
+results/
+results_48d2h/
+analysis_results/
+logs/
+*.log
+WORKFLOW.md
