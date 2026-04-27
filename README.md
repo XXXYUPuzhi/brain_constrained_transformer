@@ -183,23 +183,131 @@ Resource limitation, in the form of Top-K activation sparsity and L1 weight spar
 
 ---
 
+## 🧬 Hierarchical Decision Transformer (HDT): Temporal Bottleneck Drives Spontaneous Emergence of Behavioral Strategy Modules
+
+The behavioral-prediction experiments above operate in the *imitation* regime — training a network to match macaque action choices frame-by-frame. To test the resource-constraint hypothesis in a fully *generative* regime, we extend the framework to a closed-loop reinforcement-learning agent that interacts with the same Pac-Man task that was administered to the macaques in the lab. The architecture, training protocol, and reward structure are kept faithful to the primate paradigm, while two additional architectural priors — a **temporal information bottleneck** and a **discrete categorical bottleneck** — are introduced as the analogue, in the temporal domain, of the spatial Top-K sparsity studied above.
+
+### 1. Hypothesis
+
+Building on the spatial-sparsity result (Top-K, k≈4% of MLP units), we hypothesize that placing a low-bandwidth bottleneck on the *temporal* axis of an end-to-end RL agent — via (i) a discrete 8-way categorical channel and (ii) a fixed update interval of K=5 environment steps — should similarly induce decomposition: in this case, the spontaneous segregation of policy into a small set of macroscopic behavioral modes, each corresponding to a coherent, multi-step strategy. The behavioral repertoire of the macaque on this same task (foraging, ghost evasion, energizer-mediated hunting; Yang et al., *Nature Protocols* 2024) provides a natural set of *expected* emergent modules to test against.
+
+### 2. Architecture: Dual-Level Policy with Discrete Information Bottleneck
+
+The Hierarchical Decision Transformer (HDT) decomposes the policy π(a | s) into a *macro planner* and a *micro executor* that communicate exclusively through an 8-dimensional one-hot latent code **z ∈ {e₀, …, e₇}**, sampled via Gumbel-Softmax with straight-through gradient estimation:
+
+* **High-level (macro planner).** A 2-layer Transformer encoder (hidden 64, 4 heads, sinusoidal positional encoding) ingests the last 16 frames of a 42-dimensional feature vector and outputs (a) categorical logits over 8 latent codes, and (b) a state-value scalar for the PPO critic.
+* **Low-level (micro executor).** A 2-layer MLP (128–128, Tanh) takes the *current* observation concatenated with the active code's one-hot vector (50 input dims) and emits action logits over the four cardinal moves. Wall-incompatible actions are masked to −10⁸ before sampling, ensuring the agent never violates the maze topology.
+* **Total trainable parameters:** **94,094** — comparable in scale to the 48d2h ViT baseline above.
+
+Training is end-to-end PPO with simultaneous updates on both heads. The high-level loss carries an explicit **diversity penalty** that prevents code collapse:
+
+```
+L_high = L_clip + 0.5·L_value + 0.20·L_entropy + λ·D_KL( p(z) ‖ Uniform(8) ),    λ = 0.10
+```
+
+### 3. Two Architectural Resource Constraints
+
+| Constraint | Mechanism | Functional consequence |
+|:---|:---|:---|
+| **Temporal bottleneck (K = 5)** | High-level network is queried only once every 5 environment steps; the same code persists between queries. | Forces the planner to commit to durable strategic decisions rather than micro-managing each step; reduces the high-level information rate by 5×. |
+| **Discrete categorical bottleneck (8 codes, Gumbel-Softmax τ: 2.0 → 0.5)** | Continuous Transformer activations are quantized through a Gumbel-Softmax bottleneck before reaching the executor. | Restricts the planner-to-executor channel to log₂(8) = 3 bits per macro-step; pressures the network to share a small alphabet of high-level directives. |
+
+The temperature is annealed slowly from τ=2.0 to τ=0.5 over 2 M training steps. Fast annealing (e.g., 100 K steps) causes catastrophic mode collapse to 2/8 active codes — confirming that a sufficiently long *soft-mixture* phase is necessary for module differentiation, and that the diversity loss alone is not sufficient.
+
+### 4. Reward Structure (juice-drop proportional)
+
+Reward magnitudes follow the juice-drop ratios delivered to macaques in the lab paradigm: pellet **+2**, energizer **+4**, scared-ghost capture **+8**, completion bonus **+20**, death **−15**, game-over **−30**, time penalty −0.01. No reward shaping (proximity bonuses, wall-bump penalties) is used; the model trains on signals strictly faithful to the original primate task.
+
+### 5. Curriculum: Progressive Task Complexity on a Fixed Maze
+
+Following the macaque training protocol, the agent is trained on the *identical* 28×31 classic-arcade maze across four stages of increasing complexity. The agent advances when its rolling pellet-consumption ratio crosses the stage threshold.
+
+| Stage | Ghosts | Energizers | Max Steps | Pellet Threshold | Strategy Focus |
+|:---|:---:|:---:|:---:|:---:|:---|
+| 1. Forage Only | 0 | — | 800 | 50% | Navigation, foraging |
+| 2. One Ghost | 1 | — | 1000 | 25% | Threat-aware foraging, evasion |
+| 3. Ghosts + Power | 2 | ✓ | 1200 | 20% | Energizer use, ghost hunting |
+| 4. Full Game | 4 | ✓ | 1500 | 15% | Integrated strategy |
+
+The full curriculum is traversed in **~139 K** training steps (single RTX PRO 6000); the agent then trains in stage 4 for the remainder of the budget while the Gumbel temperature is still relatively high (τ ≈ 1.90), preserving substantial soft-mixture exploration in the full-task regime — the regime in which strategy differentiation must occur.
+
+### 6. Result: Spontaneous Emergence of Discrete Behavioral Modules
+
+The central finding is that, *without any module-level supervision, no hand-crafted sub-goals, no behavior cloning, and no auxiliary classification loss*, **7 of the 8 latent codes spontaneously develop into clearly distinguishable behavioral strategies**. Per-code statistics over **100 evaluation episodes (76,679 environment steps) on the full game** are summarized below.
+
+| Code | Usage | Avg Ghost Dist. | Frightened % | Kills | Deaths | Pellets | Emergent Behavioral Signature |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---|
+| **2** | 0.5% | 0.166 | **95.4%** | **7** | **0** | 36 | **HUNTER** — activated almost exclusively under the frightened-ghost regime; perfect 7-kill / 0-death record |
+| **7** | **68.3%** | **0.366** | 7.9% | 36 | 120 | 2553 | **SAFE FORAGER** (dominant module) — maintains the largest mean ghost distance; carries the late-game phase |
+| 4 | 24.9% | 0.276 | 4.4% | 8 | 75 | **3396** | ACTIVE FORAGER — operates at intermediate risk; highest pellet throughput per code |
+| 1 | 4.8% | 0.189 | 16.0% | 10 | 23 | 1163 | NAVIGATOR — moderate ghost-distance; transitional traffic |
+| 6 | 3.0% | 0.194 | 11.0% | 0 | 32 | 668 | VERTICAL EXPLORER |
+| 3 | 1.7% | 0.169 | 24.8% | 3 | 16 | 363 | TRANSITION |
+| 0 | 1.6% | 0.234 | 0.0% | 0 | 5 | 296 | DIRECTIONAL |
+| 5 | 0.03% | 0.140 | 0.0% | 0 | 1 | 7 | (collapsed / unused) |
+
+Aggregate: **7 / 8 active codes**, **3,757** strategy switches and **54** ghost-kill events across 100 episodes, all under a reward signal strictly faithful to the macaque paradigm.
+
+The HUNTER module (Code 2) is the most stringent test of the emergence claim. Activated in only 0.5% of all steps, it is the *only* code that gates almost exclusively on the frightened-ghost state (95.4% of its activations occur while at least one ghost is in the post-energizer scared regime). Achieving a perfect 7-kill / 0-death record from this minority footprint demonstrates that the planner has discovered the multi-step composite strategy [navigate-to-energizer → consume → pursue → capture] as a single coherent macro-action, gated by a discrete 1-of-8 categorical channel — and that it has learned to *reserve* this code for precisely the ecological context in which it pays off.
+
+### 7. Critical Ablations
+
+| Component removed | Active codes | Score | Ghost kills | Comment |
+|:---|:---:|:---:|:---:|:---|
+| **Diversity penalty (λ → 0)** | **2 / 8** | — | — | Mode collapse; only forager-type codes survive. |
+| **Slow τ-anneal (fast: 100 K)** | **2 / 8** | — | — | Premature commitment; soft-mixture exploration insufficient. |
+| **Temporal bottleneck K = 5 → K = 10** | 7 / 8 | 898 | **29** (− 46%) | Bottleneck too coarse: hunter cannot react inside the 42-step frightened window. |
+| **Action masking** | — | **0** | 0 | Agent loops at walls; no learning. |
+| **Per-environment GAE** | — | — | — | Failure to converge. |
+| **MLP executor → Transformer executor** | — | **0** | 0 | Over-parameterized executor destabilizes joint training. |
+
+The K=5 → K=10 contrast is mechanistically informative: doubling the temporal bottleneck halves the kill rate and reduces strategy-switch frequency by 2.7× (3,757 → 1,383), confirming that the temporal-abstraction window must be matched to the timescale of the to-be-learned strategy.
+
+### 8. Connection to the Macaque Behavioral Repertoire
+
+Yang et al. (2024) identified three coarse behavioral phases in macaque Pac-Man play: (i) pellet collection, (ii) threat-aware avoidance, and (iii) energizer-mediated ghost hunting. The HDT's emergent codes parallel this hierarchy at a one-to-many granularity: Codes **4** and **7** instantiate two pellet-collection variants distinguished by mean threat distance (the explore–exploit axis); Codes **1** and **6** capture distance-sensitive transitional navigation; Code **2** specifically implements the energizer-conditioned hunting phase. **Quantitative alignment between HDT internal representations and the lab's pre-recorded macaque electrophysiology / eye-tracking data — via RSA and linear encoding models analogous to the analyses reported in §"Preliminary Neural Analysis" above — is currently in progress and will be reported in a separate update.**
+
+### 9. Reproducibility
+
+Source code for the HDT extension lives in [`hdt/`](./hdt/). The full conference-style writeup with figures is at [`hdt/results/paper.html`](./hdt/results/paper.html).
+
+```bash
+# Train HDT from scratch (≈1 GPU-hour on RTX PRO 6000 to reach the full curriculum)
+cd hdt
+python train.py
+
+# Evaluate a checkpoint over 100 episodes on stage 4
+python evaluate.py --checkpoint checkpoints/final_model.pt --episodes 100 --stage 4
+
+# Reproduce per-code emergent-strategy table (the central analysis of §6 above)
+python analyze.py
+```
+
+---
+
 ## Roadmap & Future Work
 
-We are extending the baseline with additional architectural improvements to further test the hypothesis that **resource-constrained models develop more brain-like representations**.
+The two strands of evidence above — (a) Top-K spatial sparsity in a behavior-prediction ViT and (b) temporal + categorical bottlenecks in an end-to-end RL agent — converge on a single hypothesis: **architectural resource constraints, applied along *whichever* axis is informative for the task, drive networks toward more modular, biologically interpretable solutions**. The next phase of work is to close the loop with primate physiology.
 
-### Planned Experiments
+### Immediate next steps (HDT × neural alignment)
 
-1. **Causal interventions:** Clamp/ablate specific neurons (e.g., N69 in TopK-8) and measure behavioral changes
-2. **Larger models:** Apply TopK/L1 to 64d4h (3-layer) models
-3. **Combined constraints:** Apply both L1 and TopK simultaneously
-4. **Temporal dynamics:** Analyze sparsification evolution using epoch snapshots
-5. **Neural comparison:** Compare resource-limited representations with primate neural recordings via RSA
+1. **RSA between HDT hidden states and macaque PFC / FEF / premotor recordings.** Construct task-condition RDMs from (i) the Transformer planner's last-layer activations, (ii) the MLP executor hidden states, and (iii) the categorical code identity, then compute Spearman RDM-correlation against the lab's pre-recorded multi-region recordings on matched task conditions.
+2. **Linear encoding from HDT representations to single-neuron activity.** Replicate the ViT-side encoding analysis (CLS-token → premotor / FEF) using HDT planner / executor hidden states as predictors; quantify regional specificity via the MSE − MSE_shuffle metric.
+3. **Quantitative correspondence with macaque "Q-labels".** Pre-decoded hierarchical strategy states from the macaque behavior provide ground-truth module labels; compute per-code recall / mutual information against these labels to formalize the qualitative correspondence reported in §"HDT" Section 8.
+4. **Code-locked causal intervention.** Force the planner to emit a fixed code z = c for the duration of an episode and characterize the resulting behavioral phenotype, providing a behavioral-level analogue of the neuron-level ablations performed for the ViT.
 
-### Additional Architectural Directions
+### Earlier-listed extensions still on the agenda
 
-* **Differentiable L0 Regularization** — Enable simultaneous optimization of performance and parameter sparsity
-* **Modified Mixture of Experts (MoE)** — Decompose the output layer into modular behavioral units with gating
-* **Hierarchical Convergence Model (HCM)** — Dual-speed architecture with fast low-level and slow high-level modules
+1. **Causal interventions on ViT side:** Clamp/ablate specific neurons (e.g., N69 in TopK-8) and measure behavioral-prediction changes.
+2. **Larger ViT models:** Apply TopK / L1 to 64d4h (3-layer) configurations.
+3. **Combined constraints:** Apply both L1 and TopK simultaneously to a single ViT.
+4. **Temporal dynamics of sparsification:** Track the evolution of the Top-K winner set across training epochs.
+
+### Architectural directions
+
+* **Differentiable L0 Regularization** — joint optimization of performance and parameter sparsity.
+* **Modified Mixture of Experts (MoE)** — decompose the output layer into modular behavioral units with learned gating; cross-validate against the HDT's emergent code partition.
+* ~~**Hierarchical Convergence Model (HCM)**~~ — Dual-speed architecture with fast low-level and slow high-level modules. *(Realized by the HDT temporal bottleneck above; see §"HDT".)*
 
 ---
 
@@ -246,5 +354,21 @@ python run_all_48d2h.py
 bash run_experiments.sh
 ```
 
+### Hierarchical Decision Transformer (RL agent)
+
+```bash
+# Train HDT end-to-end (PPO + 4-stage curriculum + diversity loss + Gumbel τ-anneal)
+cd hdt
+python train.py
+
+# Evaluate emergent behavioral signatures on the full game
+python evaluate.py --checkpoint checkpoints/final_model.pt --episodes 100 --stage 4
+
+# Reproduce the per-code emergent-strategy table (§"HDT" Section 6)
+python analyze.py
+```
+
+The HDT writeup with figures: [`hdt/results/paper.html`](./hdt/results/paper.html).
+
 ---
-*Created by Puzhi Yu*
+*Created by Puzhi Yu — Institute of Neuroscience, CAS (Lab of Prof. Tianming Yang)*

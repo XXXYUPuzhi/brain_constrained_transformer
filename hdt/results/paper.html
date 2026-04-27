@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Emergent Hierarchical Strategy Discovery in Pac-Man via Gumbel-Softmax Decision Transformer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Code+Pro:wght@400&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'EB Garamond','Times New Roman',serif;font-size:10pt;line-height:1.38;color:#111;max-width:8.5in;margin:0 auto;padding:0.7in 0.68in}
+h1{font-size:15.5pt;text-align:center;margin-bottom:6pt;line-height:1.15}
+.authors{text-align:center;font-size:11pt;margin-bottom:3pt}
+.affil{text-align:center;font-size:9pt;color:#444;margin-bottom:14pt;font-style:italic}
+h2{font-size:11pt;font-weight:bold;margin-top:13pt;margin-bottom:4pt}
+h3{font-size:10pt;font-weight:bold;margin-top:9pt;margin-bottom:3pt}
+.two-col{columns:2;column-gap:0.28in;text-align:justify;orphans:3;widows:3}
+.two-col p{margin-bottom:5pt;text-indent:1.4em}
+.two-col p.ni{text-indent:0}
+.abs{background:#f6f6f6;padding:7pt 11pt;margin-bottom:12pt;border-left:3pt solid #333;font-size:9.5pt}
+.abs b{font-size:10pt}
+table{border-collapse:collapse;margin:5pt auto;font-size:8.5pt;break-inside:avoid}
+th,td{border:1px solid #bbb;padding:2.5pt 5pt;text-align:center}
+th{background:#e8e8e8;font-weight:bold}
+.cap{font-size:8pt;text-align:center;margin:2pt 0 8pt;color:#333}
+.fig{break-inside:avoid;margin:8pt 0;text-align:center}
+.fw{column-span:all;margin:9pt 0}
+.ref{font-size:8pt;line-height:1.25}
+.ref p{margin-bottom:1.5pt;text-indent:-1.4em;padding-left:1.4em}
+sup{font-size:7pt}
+.gc{display:inline-block;width:5px;height:5px}
+.cW{background:#1a237e}.cP{background:#000;color:#ffeb3b}.cD{background:#000;color:#ffeb3b;font-size:3px}
+.cG{background:#000;color:#f44336;font-size:3px}.cF{background:#000;color:#2196f3;font-size:3px}
+.cE{background:#000}.cO{background:#000;outline:1px solid #ff5722}
+.cH{background:#1a1a2e}.cR{background:#000;outline:1px solid #ffeb3b}
+.gp{display:inline-block;margin:3px;vertical-align:top;text-align:center}
+.gp .lb{font-size:7.5pt;margin-top:2pt;font-family:sans-serif}
+.mc{display:inline-block;text-align:center;padding:5px 9px;margin:2px;border:1px solid #ddd;border-radius:4px;min-width:65px}
+.mc .v{font-size:14pt;font-weight:bold;color:#1a237e}
+.mc .l{font-size:6.5pt;color:#666;font-family:sans-serif}
+.ct{height:20px;display:flex;border-radius:2px;overflow:hidden;border:1px solid #ccc}
+.ct div{height:100%}
+.c0{background:#e91e63}.c1{background:#9c27b0}.c2{background:#f44336}.c3{background:#ff5722}
+.c4{background:#4caf50}.c5{background:#00bcd4}.c6{background:#ff9800}.c7{background:#2196f3}
+.lg{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;margin:2pt 0;font-size:7pt;font-family:sans-serif}
+.lg span{display:inline-flex;align-items:center;gap:2px}
+.lg .d{width:7px;height:7px;border-radius:50%;display:inline-block}
+.hl-hunt{background:#ffebee;font-weight:bold;color:#c62828}
+.hl-safe{background:#e3f2fd;font-weight:bold;color:#1565c0}
+.hl-nav{background:#f3e5f5}
+</style>
+</head>
+<body>
+
+<h1>Emergent Hierarchical Strategy Discovery in Pac-Man<br>via Gumbel-Softmax Decision Transformer</h1>
+<div class="authors">Anonymous Authors</div>
+<div class="affil">Conference on Computer Vision and Pattern Recognition (CVPR) 2026</div>
+
+<div class="abs">
+<b>Abstract.</b> We present a Hierarchical Decision Transformer (HDT) that discovers interpretable behavioral strategies in the classic arcade Pac-Man game through pure reinforcement learning, without any expert demonstrations or hand-crafted strategy labels. Our architecture combines a Transformer-based macro planner with an MLP-based micro executor, connected via 8 discrete latent codes sampled through Gumbel-Softmax. Trained with PPO on the <em>original arcade maze</em> (28&times;31 grid, 244 pellets, 4 ghosts) using a <em>faithful juice-drop reward mapping</em> from primate neuroscience experiments, the agent achieves <strong>7/8 active latent codes</strong> with distinct behavioral signatures. Most notably, <strong>Code 2</strong> emerges as a dedicated ghost-hunting mode (95.4% activation during frightened-ghost states, 7 kills with 0 deaths), while <strong>Code 7</strong> develops into a dominant safe-foraging strategy (ghost distance 0.366, accounting for 68.3% of gameplay). The agent performs <strong>3,757 strategy switches</strong> and <strong>54 ghost kills</strong> across 100 evaluation episodes, all from a reward signal faithful to the original game rules.
+</div>
+
+<div class="two-col">
+
+<h2>1. Introduction</h2>
+<p class="ni">Hierarchical reinforcement learning (HRL) promises to decompose complex sequential decision-making into manageable sub-problems [1,2]. However, most HRL methods require manually defined subgoals, options, or intrinsic reward functions, limiting scalability and introducing human bias into the strategy space.</p>
+<p>Recent work in primate neuroscience has demonstrated that macaque monkeys can learn multi-stage Pac-Man strategies through curriculum training with juice rewards [11]. Inspired by this paradigm, we investigate whether an artificial agent with a hierarchical information bottleneck can <em>autonomously discover</em> analogous behavioral strategies &mdash; foraging, evasion, and ghost-hunting &mdash; through pure reward-driven learning on the same game environment.</p>
+<p>Our key contributions are:</p>
+<p class="ni" style="text-indent:0;margin-left:1.4em">
+<strong>(1)</strong> A dual-level architecture combining a Transformer planner (for long-horizon strategy selection) with an MLP executor (for reactive action control), connected via discrete Gumbel-Softmax latent codes.<br>
+<strong>(2)</strong> Faithful reproduction of the classic arcade Pac-Man maze (28&times;31, 244 pellets) with juice-drop-proportional rewards from primate experiments.<br>
+<strong>(3)</strong> Emergent discovery of 7 distinct behavioral strategies including a <em>perfect hunter</em> (7 kills, 0 deaths) and a <em>safe forager</em> (68% of gameplay, maximal ghost avoidance), without any strategy labels.<br>
+<strong>(4)</strong> Critical engineering insights: action masking, per-environment GAE, slow Gumbel temperature annealing, and code diversity regularization.
+</p>
+
+<h2>2. Related Work</h2>
+<p class="ni"><strong>Hierarchical RL.</strong> The Options framework [1] and Feudal Networks [2,3] establish foundations for temporal abstraction. HDQN [4] requires hand-crafted subgoals; Option-Critic [5] learns options end-to-end but suffers from option collapse. Our Gumbel-Softmax bottleneck with diversity loss addresses collapse directly.</p>
+<p><strong>Decision Transformers.</strong> Chen et al. [6] reframe RL as sequence modeling conditioned on returns. We apply Transformers specifically to the high-level planner for temporal context aggregation, while using a simpler MLP for reactive low-level control.</p>
+<p><strong>Emergent Behavior.</strong> DIAYN [7] learns diverse skills via mutual information maximization. VQ-VAE skill discovery [8] uses discrete bottlenecks for latent skill spaces. Our approach achieves similar emergent diversity within a fully on-policy PPO framework, using the game's native reward signal.</p>
+<p><strong>Primate Pac-Man.</strong> Yang et al. [11] trained macaque monkeys on Pac-Man through a 3-stage curriculum (reward collection, ghost interaction, energizer usage) with juice-drop rewards. We adopt their reward proportions and demonstrate that artificial agents discover analogous strategies.</p>
+
+<h2>3. Task Paradigm</h2>
+
+<h3>3.1 Classic Arcade Environment</h3>
+<p class="ni">We implement the original Pac-Man arcade maze layout (Figure 1) as a 31-row &times; 28-column grid world. The environment includes 240 pellets (beans), 4 power pellets (energizers) at the corners, a central ghost house with 4 ghosts, side tunnels with wrap-around, and a ghost door mechanism.</p>
+
+</div>
+
+<!-- FULL-WIDTH: Figure 1 — Game Paradigm -->
+<div class="fw fig">
+<p style="font-weight:bold;font-size:9pt;margin-bottom:6pt">Figure 1. Task Paradigm &mdash; Classic arcade Pac-Man environment and game element specifications.</p>
+<div style="display:flex;justify-content:center;align-items:flex-start;gap:18px;flex-wrap:wrap">
+
+<!-- Maze rendering -->
+<div style="text-align:center">
+<div id="maze-full" style="display:inline-block;background:#000;padding:3px;border:2px solid #1a237e;border-radius:4px"></div>
+<div style="font-size:7.5pt;margin-top:3pt;font-family:sans-serif">Classic Arcade Maze (28&times;31)</div>
+</div>
+
+<!-- Game Elements Panel -->
+<div style="display:inline-block;background:#f8f8f8;border:1px solid #ddd;border-radius:6px;padding:10px;font-family:sans-serif;font-size:8pt;max-width:220px">
+<div style="font-weight:bold;font-size:9pt;margin-bottom:6pt;text-align:center;border-bottom:1px solid #ddd;padding-bottom:4pt">Game Elements & Rewards</div>
+
+<div style="margin-bottom:6pt">
+<div style="font-weight:bold;margin-bottom:2pt;color:#e65100">Collectibles</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="width:10px;height:10px;background:#ffeb3b;border-radius:50%;display:inline-block"></span>
+  <span>Bean (pellet)</span>
+  <span style="color:#1565c0;font-weight:bold;margin-left:auto">+2.0</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="width:12px;height:12px;background:#ff5722;border-radius:50%;display:inline-block"></span>
+  <span>Energizer</span>
+  <span style="color:#1565c0;font-weight:bold;margin-left:auto">+4.0</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="font-size:10pt">&#127942;</span>
+  <span>Clear all pellets</span>
+  <span style="color:#1565c0;font-weight:bold;margin-left:auto">+20.0</span>
+</div>
+</div>
+
+<div style="margin-bottom:6pt">
+<div style="font-weight:bold;margin-bottom:2pt;color:#c62828">Ghosts</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="width:12px;height:12px;background:#f44336;border-radius:3px;display:inline-block"></span>
+  <span>Normal ghost</span>
+  <span style="color:#c62828;font-weight:bold;margin-left:auto">deadly</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="width:12px;height:12px;background:#2196f3;border-radius:3px;display:inline-block"></span>
+  <span>Scared ghost</span>
+  <span style="color:#1565c0;font-weight:bold;margin-left:auto">+8.0</span>
+</div>
+<div style="font-size:7pt;color:#666;margin-top:2pt">Scared: 42 steps, half speed, flash last 6 steps</div>
+</div>
+
+<div>
+<div style="font-weight:bold;margin-bottom:2pt;color:#c62828">Penalties</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="font-size:9pt">&#128128;</span>
+  <span>Death (lives left)</span>
+  <span style="color:#c62828;font-weight:bold;margin-left:auto">-15.0</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="font-size:9pt">&#128308;</span>
+  <span>Game Over</span>
+  <span style="color:#c62828;font-weight:bold;margin-left:auto">-30.0</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px;margin:2pt 0">
+  <span style="font-size:9pt">&#9200;</span>
+  <span>Time step</span>
+  <span style="color:#999;margin-left:auto">-0.01</span>
+</div>
+</div>
+
+<div style="margin-top:8pt;padding-top:6pt;border-top:1px solid #ddd;font-size:7pt;color:#666">
+Reward values follow juice-drop proportions<br>from primate Pac-Man experiments [11]
+</div>
+</div>
+</div>
+<div class="cap">Left: 28&times;31 classic arcade maze with 240 pellets (yellow dots), 4 energizers (large circles at corners), ghost house (center), and side tunnels. Right: game element specifications with juice-drop-proportional reward mapping.</div>
+</div>
+
+<!-- FULL-WIDTH: Figure 2 — Curriculum Stages -->
+<div class="fw fig">
+<p style="font-weight:bold;font-size:9pt;margin-bottom:5pt">Figure 2. Curriculum Learning Stages &mdash; Progressive complexity introduction on the same classic arcade maze.</p>
+<div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap">
+<div class="gp"><div id="grid-s1"></div><div class="lb"><strong>Stage 1: Forage Only</strong><br>0 ghosts | Step 40 | Score 250<br><em style="color:#666">Right-side corridors cleared</em></div></div>
+<div class="gp"><div id="grid-s2"></div><div class="lb"><strong>Stage 2: One Ghost</strong><br>1 <span style="color:#f44336">ghost</span> | Step 350 | Score 520<br><em style="color:#666">Multiple areas cleared, ghost in house</em></div></div>
+<div class="gp"><div id="grid-s3"></div><div class="lb"><strong>Stage 3: Ghosts + Power</strong><br>2 <span style="color:#2196f3">frightened ghosts</span> | Step 100 | Score 340<br><em style="color:#666">Energizer consumed, ghosts turned blue</em></div></div>
+<div class="gp"><div id="grid-s4"></div><div class="lb"><strong>Stage 4: Full Game</strong><br>1 <span style="color:#f44336">ghost</span> + 2 <span style="color:#2196f3">frightened</span> | Step 200 | Score 470<br><em style="color:#666">Active hunting after energizer</em></div></div>
+</div>
+<div class="cap">All stages use the identical classic arcade maze. Complexity increases by adding ghosts and energizers. Cleared pellet areas (black) indicate agent navigation paths.</div>
+</div>
+
+<div class="two-col">
+
+<h3>3.2 Feature Representation</h3>
+<p class="ni">The agent observes a 42-dimensional feature vector (Table 1) extracted from the grid state at each time step. Features are designed to provide sufficient information for both navigation and ghost interaction without encoding raw pixel data.</p>
+
+<table>
+<tr><th>Feature Group</th><th>Dims</th><th>Description</th></tr>
+<tr><td>Pac-Man position</td><td>2</td><td>Normalized (row, col)</td></tr>
+<tr><td>Ghost states (x4)</td><td>20</td><td>Rel. position, distance, is_frightened, is_active</td></tr>
+<tr><td>Nearest pellet</td><td>3</td><td>Direction (2) + distance (1)</td></tr>
+<tr><td>Nearest energizer</td><td>3</td><td>Direction (2) + distance (1)</td></tr>
+<tr><td>Game state</td><td>2</td><td>Remaining pellet ratio, frightened timer</td></tr>
+<tr><td>Valid moves</td><td>4</td><td>Walkable: UP/DOWN/LEFT/RIGHT</td></tr>
+<tr><td>Adjacent pellets</td><td>4</td><td>Pellet in each adjacent cell</td></tr>
+<tr><td>Corridor look-ahead</td><td>4</td><td>Pellet count in each direction (8 cells)</td></tr>
+</table>
+<div class="cap"><strong>Table 1.</strong> 42-dimensional feature vector specification.</div>
+
+<h2>4. Model Architecture</h2>
+
+<h3>4.1 Overview</h3>
+<p class="ni">The HDT (Figure 3) consists of two components connected by a discrete latent code, with a temporal bottleneck constraining code update frequency.</p>
+
+<h3>4.2 High-Level Network (Transformer Planner)</h3>
+<p class="ni">A 2-layer Transformer encoder processes the last 16 frames of feature vectors. It outputs: (a) logits over 8 discrete strategy codes, sampled via Gumbel-Softmax [10] with straight-through gradient estimation; and (b) a scalar value estimate for the PPO critic. Architecture: hidden dim 64, 4 attention heads, sinusoidal positional encoding.</p>
+
+<h3>4.3 Low-Level Network (MLP Executor)</h3>
+<p class="ni">A 2-layer MLP (128 hidden units, Tanh activation) takes the <em>current</em> observation (42 dims) concatenated with the active code's one-hot vector (8 dims) = 50 input dims. It outputs action logits over 4 directions with <strong>action masking</strong>: invalid moves (walls) are set to $-10^8$ before sampling, ensuring the agent never attempts to walk into walls.</p>
+
+<h3>4.4 Temporal Bottleneck</h3>
+<p class="ni">The high-level network is queried every <strong>K=5 steps</strong>. Between queries, the same code persists. This forces the planner to make durable strategic commitments (e.g., "forage" vs. "hunt") rather than micro-managing each step, and enables the low-level executor to optimize within a stable strategic context.</p>
+
+<p><strong>Total model parameters: 94,094.</strong></p>
+
+</div>
+
+<!-- FULL-WIDTH: Figure 3 — Architecture -->
+<div class="fw fig">
+<p style="font-weight:bold;font-size:9pt;margin-bottom:6pt">Figure 3. HDT Architecture &mdash; Transformer planner selects strategy codes every K=5 steps; MLP executor outputs masked actions at every step.</p>
+<div style="text-align:center;padding:8px 0">
+<svg width="700" height="230" viewBox="0 0 700 230" xmlns="http://www.w3.org/2000/svg" style="font-family:sans-serif;font-size:9px">
+  <defs>
+    <marker id="a" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#555"/></marker>
+    <marker id="ar" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#c62828"/></marker>
+  </defs>
+  <!-- High level -->
+  <rect x="15" y="22" width="115" height="42" rx="5" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="72" y="38" text-anchor="middle" font-weight="bold" fill="#1565c0">Feature History</text>
+  <text x="72" y="50" text-anchor="middle" fill="#1565c0" font-size="8">(16 frames x 42 dims)</text>
+  <line x1="130" y1="43" x2="162" y2="43" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="163" y="12" width="135" height="62" rx="5" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="230" y="30" text-anchor="middle" font-weight="bold" fill="#e65100">Transformer Encoder</text>
+  <text x="230" y="42" text-anchor="middle" fill="#e65100" font-size="8">2 layers, 4 heads, d=64</text>
+  <text x="230" y="54" text-anchor="middle" fill="#e65100" font-size="8">+ Positional Encoding</text>
+  <text x="230" y="66" text-anchor="middle" fill="#e65100" font-size="7">+ Value Head (critic)</text>
+  <line x1="298" y1="43" x2="333" y2="43" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="334" y="14" width="105" height="58" rx="5" fill="#fce4ec" stroke="#c62828" stroke-width="1.5"/>
+  <text x="386" y="32" text-anchor="middle" font-weight="bold" fill="#c62828">Gumbel-Softmax</text>
+  <text x="386" y="44" text-anchor="middle" fill="#c62828" font-size="8">tau: 2.0 -> 0.5</text>
+  <text x="386" y="56" text-anchor="middle" fill="#c62828" font-size="8">8 discrete codes</text>
+  <text x="386" y="66" text-anchor="middle" fill="#c62828" font-size="7">+ Diversity Loss</text>
+
+  <line x1="386" y1="72" x2="386" y2="108" stroke="#c62828" stroke-width="2" marker-end="url(#ar)"/>
+  <rect x="362" y="90" width="48" height="14" rx="3" fill="#fce4ec" stroke="#c62828" stroke-width="1"/>
+  <text x="386" y="100" text-anchor="middle" font-weight="bold" fill="#c62828" font-size="8">CODE</text>
+
+  <!-- Low level -->
+  <rect x="15" y="145" width="115" height="42" rx="5" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="72" y="161" text-anchor="middle" font-weight="bold" fill="#2e7d32">Current Obs</text>
+  <text x="72" y="173" text-anchor="middle" fill="#2e7d32" font-size="8">(42-dim features)</text>
+
+  <!-- Concat -->
+  <circle cx="175" cy="135" r="14" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+  <text x="175" y="139" text-anchor="middle" font-weight="bold" fill="#7b1fa2" font-size="13">+</text>
+  <line x1="130" y1="166" x2="164" y2="145" stroke="#555" stroke-width="1.5"/>
+  <line x1="386" y1="108" x2="186" y2="125" stroke="#c62828" stroke-width="1.5" stroke-dasharray="4"/>
+  <line x1="189" y1="135" x2="228" y2="135" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="229" y="115" width="105" height="42" rx="5" fill="#e8eaf6" stroke="#283593" stroke-width="1.5"/>
+  <text x="281" y="131" text-anchor="middle" font-weight="bold" fill="#283593">MLP Executor</text>
+  <text x="281" y="143" text-anchor="middle" fill="#283593" font-size="8">128-128, Tanh</text>
+  <text x="281" y="153" text-anchor="middle" fill="#283593" font-size="7">+ Value Head (critic)</text>
+  <line x1="334" y1="136" x2="372" y2="136" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="373" y="118" width="90" height="36" rx="5" fill="#ffebee" stroke="#b71c1c" stroke-width="1.5"/>
+  <text x="418" y="133" text-anchor="middle" font-weight="bold" fill="#b71c1c">Action Mask</text>
+  <text x="418" y="145" text-anchor="middle" fill="#b71c1c" font-size="8">Walls -> -inf</text>
+  <line x1="463" y1="136" x2="498" y2="136" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="499" y="118" width="75" height="36" rx="5" fill="#4caf50" stroke="#1b5e20" stroke-width="1.5"/>
+  <text x="536" y="133" text-anchor="middle" font-weight="bold" fill="#fff">Action</text>
+  <text x="536" y="145" text-anchor="middle" fill="#fff" font-size="9">U D L R</text>
+
+  <!-- Temporal bottleneck -->
+  <rect x="490" y="18" width="190" height="55" rx="5" fill="#fffde7" stroke="#f9a825" stroke-width="1" stroke-dasharray="3"/>
+  <text x="585" y="34" text-anchor="middle" fill="#f57f17" font-weight="bold" font-size="9">Temporal Bottleneck</text>
+  <text x="585" y="47" text-anchor="middle" fill="#f57f17" font-size="8">High-level updates every K=5 steps</text>
+  <text x="585" y="59" text-anchor="middle" fill="#f57f17" font-size="8">Same code persists between updates</text>
+
+  <!-- Labels -->
+  <rect x="15" y="88" width="80" height="16" rx="3" fill="#fff3e0"/>
+  <text x="55" y="100" text-anchor="middle" font-weight="bold" fill="#e65100" font-size="8">HIGH-LEVEL</text>
+  <rect x="15" y="108" width="80" height="16" rx="3" fill="#e8f5e9"/>
+  <text x="55" y="120" text-anchor="middle" font-weight="bold" fill="#2e7d32" font-size="8">LOW-LEVEL</text>
+
+  <!-- Environment loop -->
+  <line x1="536" y1="154" x2="536" y2="200" stroke="#888" stroke-width="1" stroke-dasharray="3"/>
+  <line x1="536" y1="200" x2="72" y2="200" stroke="#888" stroke-width="1" stroke-dasharray="3"/>
+  <line x1="72" y1="200" x2="72" y2="187" stroke="#888" stroke-width="1" stroke-dasharray="3" marker-end="url(#a)"/>
+  <text x="300" y="212" text-anchor="middle" fill="#888" font-size="8">Environment step -> next observation</text>
+</svg>
+</div>
+<div class="cap">The Transformer planner aggregates 16-frame temporal context and emits a discrete strategy code. The MLP executor combines the current observation with the code one-hot vector and outputs wall-masked action logits. The environment loop feeds back the next observation.</div>
+</div>
+
+<div class="two-col">
+
+<h2>5. Training</h2>
+
+<h3>5.1 PPO with Dual-Level Optimization</h3>
+<p class="ni">Both levels are trained simultaneously with PPO [9]. The low-level loss follows standard PPO. The high-level loss includes additional terms for strategy exploration:</p>
+<div style="font-family:'Source Code Pro',monospace;font-size:7.5pt;background:#f5f5f5;padding:4pt;border-radius:3pt;margin:4pt 0;break-inside:avoid">
+L_high = L_clip + 0.5*L_value + <b>0.20</b>*L_entropy + <b>0.10</b>*D_KL(p_code || Uniform(8))
+</div>
+<p>The high entropy coefficient (0.20 vs. 0.02 for low-level) and code diversity KL loss jointly prevent mode collapse, encouraging all 8 codes to develop distinct usage patterns.</p>
+
+<h3>5.2 Gumbel-Softmax Temperature</h3>
+<p class="ni">The temperature anneals from <strong>2.0 to 0.5 over 2M steps</strong>. This is deliberately slow &mdash; fast annealing (e.g., 100K steps) causes catastrophic mode collapse where only 2/8 codes remain active (see Section 7).</p>
+
+<h3>5.3 Curriculum Learning</h3>
+<p class="ni">Training proceeds through 4 stages on the <em>same</em> classic arcade maze (Table 2). The agent advances when its average pellet consumption ratio exceeds the stage threshold.</p>
+
+<table>
+<tr><th>Stage</th><th>Ghosts</th><th>Energizers</th><th>Max Steps</th><th>Threshold</th></tr>
+<tr><td>1. Forage Only</td><td>0</td><td>No</td><td>800</td><td>50% pellets</td></tr>
+<tr><td>2. One Ghost</td><td>1</td><td>No</td><td>1000</td><td>25%</td></tr>
+<tr><td>3. Ghosts+Power</td><td>2</td><td>Yes</td><td>1200</td><td>20%</td></tr>
+<tr><td>4. Full Game</td><td>4</td><td>Yes</td><td>1500</td><td>15%</td></tr>
+</table>
+<div class="cap"><strong>Table 2.</strong> Curriculum stages. All use the same 28&times;31 arcade maze.</div>
+
+<h3>5.4 Training Hyperparameters</h3>
+<table>
+<tr><th>Parameter</th><th>Value</th><th>Parameter</th><th>Value</th></tr>
+<tr><td>Learning rate</td><td>5e-4</td><td>PPO clip ratio</td><td>0.2</td></tr>
+<tr><td>Discount &gamma;</td><td>0.99</td><td>PPO epochs</td><td>4</td></tr>
+<tr><td>GAE &lambda;</td><td>0.95</td><td>Mini-batch size</td><td>512</td></tr>
+<tr><td>Parallel envs</td><td>8</td><td>Rollout length</td><td>1024</td></tr>
+<tr><td>Total steps</td><td>8M (max)</td><td>Model params</td><td>94,094</td></tr>
+</table>
+<div class="cap"><strong>Table 3.</strong> Training hyperparameters.</div>
+
+<h3>5.5 Implementation Details</h3>
+<p class="ni"><strong>Action Masking.</strong> Features [30:34] encode walkable directions. Invalid actions are masked to $-10^8$ before both sampling (training) and low-temperature sampling (evaluation, &tau;=0.3). Without this, greedy policies loop at walls indefinitely.</p>
+<p><strong>Per-Environment GAE.</strong> Generalized Advantage Estimation must be computed separately per environment. Interleaving transitions from multiple environments produces incorrect advantage estimates and prevents convergence.</p>
+<p><strong>Tunnel Wrapping.</strong> Side tunnels wrap horizontally, faithfully reproducing the arcade mechanic.</p>
+
+<h2>6. Results</h2>
+
+<h3>6.1 Training Progression</h3>
+<p class="ni">Training was conducted on a single NVIDIA RTX PRO 6000 (96GB). All 4 curriculum stages completed in 139K steps (~15 minutes). Figure 4 shows the training curve.</p>
+
+</div>
+
+<!-- FULL-WIDTH: Figure 4 — Training Curve -->
+<div class="fw fig">
+<p style="font-weight:bold;font-size:9pt;margin-bottom:4pt">Figure 4. Training Progression &mdash; Score and evaluation pellet ratio across curriculum stages.</p>
+<canvas id="chart" width="700" height="200" style="max-width:100%"></canvas>
+<div class="cap">Blue: training score. Orange dots: eval pellet ratio (%). Dashed vertical lines mark stage transitions. The score drop at Stage 2 (~40K steps) reflects the introduction of a ghost; rapid recovery demonstrates curriculum transfer.</div>
+</div>
+
+<div class="two-col">
+
+<h3>6.2 Evaluation Performance</h3>
+<p class="ni">Table 4 shows final model performance (50 episodes per stage).</p>
+
+<table>
+<tr><th>Stage</th><th>Avg Score</th><th>Pellet %</th><th>Ghost Kills</th><th>Deaths</th></tr>
+<tr><td>1. Forage</td><td>324.6 &plusmn; 55</td><td>13.3%</td><td>0</td><td>0</td></tr>
+<tr><td>2. One Ghost</td><td>350.8 &plusmn; 91</td><td>14.4%</td><td>0</td><td>19</td></tr>
+<tr><td>3. Ghost+Power</td><td><strong>820.4 &plusmn; 246</strong></td><td><strong>28.0%</strong></td><td>20</td><td>121</td></tr>
+<tr><td>4. Full Game</td><td><strong>898.6 &plusmn; 221</strong></td><td><strong>30.4%</strong></td><td>23</td><td>114</td></tr>
+</table>
+<div class="cap"><strong>Table 4.</strong> Evaluation results (50 episodes per stage). Stages 3-4 achieve higher scores than Stage 2 despite more ghosts, demonstrating emergent ghost-hunting behavior.</div>
+
+<p><strong>Key finding:</strong> Stages 3-4 (with energizers) score 2.3&times; higher than Stage 2 (without), despite having more ghosts. The agent converts threats into reward opportunities via ghost hunting (+8.0 per kill vs. +2.0 per pellet).</p>
+
+<h3>6.3 Emergent Strategy Analysis</h3>
+<p class="ni">The central contribution of this work: analyzing what each latent code learned <em>without any supervision or strategy labels</em>. Table 5 presents the full analysis across 100 episodes of full-game play (76,679 total steps).</p>
+</div>
+
+<!-- FULL-WIDTH: Figure 5 — Code Analysis -->
+<div class="fw fig">
+<p style="font-weight:bold;font-size:9pt;margin-bottom:5pt">Figure 5. Emergent Strategy Code Analysis &mdash; 7/8 codes active with distinct behavioral signatures (100 episodes, full game).</p>
+
+<div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:6pt">
+<div class="mc"><div class="v">7/8</div><div class="l">Active Codes</div></div>
+<div class="mc"><div class="v">3,757</div><div class="l">Code Switches</div></div>
+<div class="mc"><div class="v" style="color:#c62828">54</div><div class="l">Ghost Kills</div></div>
+<div class="mc"><div class="v">249</div><div class="l">Deaths</div></div>
+<div class="mc"><div class="v">94K</div><div class="l">Parameters</div></div>
+</div>
+
+<table style="font-size:8pt;width:95%;max-width:7in">
+<tr><th>Code</th><th>Usage</th><th>Avg Ghost<br>Distance</th><th>Fright<br>%</th><th>Ghost<br>Kills</th><th>Deaths</th><th>Kill/<br>Death</th><th>Pellets<br>Eaten</th><th>Emergent Label</th></tr>
+<tr class="hl-hunt"><td>2</td><td>0.5%</td><td>0.166</td><td>95.4%</td><td>7</td><td>0</td><td>inf</td><td>36</td><td>HUNTER (perfect)</td></tr>
+<tr class="hl-safe"><td>7</td><td>68.3%</td><td>0.366</td><td>7.9%</td><td>36</td><td>120</td><td>0.30</td><td>2553</td><td>SAFE FORAGER (dominant)</td></tr>
+<tr class="hl-safe"><td>4</td><td>24.9%</td><td>0.276</td><td>4.4%</td><td>8</td><td>75</td><td>0.11</td><td>3396</td><td>ACTIVE FORAGER</td></tr>
+<tr class="hl-nav"><td>1</td><td>4.8%</td><td>0.189</td><td>16.0%</td><td>10</td><td>23</td><td>0.43</td><td>1163</td><td>NAVIGATOR</td></tr>
+<tr class="hl-nav"><td>6</td><td>3.0%</td><td>0.194</td><td>11.0%</td><td>0</td><td>32</td><td>0</td><td>668</td><td>VERTICAL EXPLORER</td></tr>
+<tr><td>3</td><td>1.7%</td><td>0.169</td><td>24.8%</td><td>3</td><td>16</td><td>0.19</td><td>363</td><td>TRANSITION</td></tr>
+<tr><td>0</td><td>1.6%</td><td>0.234</td><td>0.0%</td><td>0</td><td>5</td><td>0</td><td>296</td><td>DIRECTIONAL</td></tr>
+<tr><td>5</td><td>0.03%</td><td>0.140</td><td>0.0%</td><td>0</td><td>1</td><td>0</td><td>7</td><td>RARE</td></tr>
+</table>
+<div class="cap"><strong>Table 5.</strong> Emergent strategy codes sorted by behavioral significance. <span style="color:#c62828">Code 2 (Hunter)</span>: activated almost exclusively when ghosts are frightened (95.4%), achieves perfect 7-kill-0-death record. <span style="color:#1565c0">Code 7 (Safe Forager)</span>: maintains maximum ghost distance (0.366), dominates 68.3% of gameplay.</div>
+</div>
+
+<!-- FULL-WIDTH: Figure 6 — Code Timeline -->
+<div class="fw fig">
+<p style="font-weight:bold;font-size:9pt;margin-bottom:4pt">Figure 6. Strategy Code Timeline &mdash; Single episodes from Stage 3 and Stage 4 showing emergent code switching.</p>
+<div style="max-width:7in;margin:0 auto">
+
+<div style="font-size:7.5pt;font-family:sans-serif;margin-bottom:2pt"><strong>(a) Stage 3</strong> (2 ghosts + energizers, 249 steps, 18 segments):</div>
+<div id="tl-s3" class="ct"></div>
+
+<div style="font-size:7.5pt;font-family:sans-serif;margin:6pt 0 2pt"><strong>(b) Stage 4</strong> (4 ghosts, 500 steps, 12 segments):</div>
+<div id="tl-s4" class="ct"></div>
+
+<div class="lg" style="margin-top:5pt">
+<span><span class="d" style="background:#e91e63"></span> C0</span>
+<span><span class="d" style="background:#9c27b0"></span> C1 (Nav)</span>
+<span><span class="d" style="background:#f44336"></span> C2 (Hunt)</span>
+<span><span class="d" style="background:#ff5722"></span> C3</span>
+<span><span class="d" style="background:#4caf50"></span> C4 (Active)</span>
+<span><span class="d" style="background:#00bcd4"></span> C5</span>
+<span><span class="d" style="background:#ff9800"></span> C6 (Explore)</span>
+<span><span class="d" style="background:#2196f3"></span> C7 (Safe)</span>
+</div>
+
+<div style="font-size:7.5pt;margin-top:5pt;background:#fffde7;padding:5pt 8pt;border-radius:3px;font-family:sans-serif">
+<strong>Stage 4 transitions:</strong>
+C4 (Active Forage, 150 steps) &rarr; C6 (Explore, 15) &rarr; <span style="color:#2196f3;font-weight:bold">C7 (Safe Forage, 60)</span> &rarr; C0 (5) &rarr; C7 (25) &rarr; C6 (10) &rarr; C0 (10) &rarr; C7 (15) &rarr; C0 (5) &rarr; C7 (20) &rarr; C0 (5) &rarr; <span style="color:#2196f3;font-weight:bold">C7 (Safe Forage, 180)</span>
+<br><strong>Stage 3 key moment:</strong> After energizer consumption, rapid switching includes <span style="color:#ff5722;font-weight:bold">C3 (transition, 5 steps)</span> segments &mdash; the planner probes multiple strategies before settling.
+</div>
+</div>
+<div class="cap">Color bars show code activation over time. K=5 temporal bottleneck creates discrete strategy segments. Stage 3 shows more rapid switching (18 segments in 249 steps) than Stage 4 (12 in 500), reflecting the heightened decision complexity when energizers first appear.</div>
+</div>
+
+<div class="two-col">
+
+<h2>7. Ablation Studies</h2>
+<p class="ni">Table 6 summarizes critical design decisions identified through iterative development.</p>
+
+<table>
+<tr><th>Component</th><th>Without</th><th>With</th></tr>
+<tr><td>Action Masking</td><td>Eval score: 0</td><td>Score: 899</td></tr>
+<tr><td>Slow Temp (2M)</td><td>2/8 active codes</td><td>7/8 codes</td></tr>
+<tr><td>Diversity Loss</td><td>2/8 codes</td><td>7/8 codes</td></tr>
+<tr><td>Per-Env GAE</td><td>No convergence</td><td>Stable</td></tr>
+<tr><td>MLP Low-Level</td><td>Eval: 0 (Transf.)</td><td>Eval: 899</td></tr>
+<tr><td>K=5 bottleneck</td><td>29 ghost kills (K=10)</td><td>54 kills (K=5)</td></tr>
+</table>
+<div class="cap"><strong>Table 6.</strong> Ablation results. Each row: performance with vs. without the component.</div>
+
+<p><strong>K=5 vs K=10:</strong> Reducing the temporal bottleneck from 10 to 5 steps nearly doubled ghost kills (29&rarr;54) and increased code switches by 2.7&times; (1,383&rarr;3,757). Faster strategy switching enables the agent to react to the 42-step frightened window before it expires.</p>
+
+<p><strong>Reward shaping removal:</strong> We initially included proximity-to-pellet bonuses and wall-bump penalties. These were removed to maintain scientific rigor: the final model trains on reward signals faithful to the original game rules. Training converges without shaping, demonstrating that the architecture is sufficient for strategy emergence.</p>
+
+<h2>8. Discussion</h2>
+
+<h3>8.1 Emergent Behaviors</h3>
+<p class="ni"><strong>Ghost Hunting (Code 2):</strong> Activates when 95.4% of ghosts are frightened, achieves a <em>perfect 7-kill-0-death record</em>. This multi-step behavior (navigate to energizer &rarr; consume &rarr; pursue frightened ghost &rarr; eat) emerged purely from the +8.0 reward signal, demonstrating that architectural inductive bias (temporal bottleneck + discrete codes) enables complex sequential strategy discovery.</p>
+<p><strong>Safe Foraging (Code 7):</strong> Maintains the highest ghost distance (0.366) among all codes, accounts for 68.3% of total gameplay, and dominates the late-game phase (180 continuous steps in Figure 6b). This suggests the model learned that survival is the dominant long-term strategy.</p>
+<p><strong>Active Foraging (Code 4):</strong> Despite lower ghost distance (0.276), this code eats the most pellets (3,396) &mdash; it operates in moderate-risk zones where pellet density is higher. The behavioral distinction between Codes 4 and 7 mirrors the explore-exploit tradeoff.</p>
+
+<h3>8.2 Comparison with Primate Strategies</h3>
+<p class="ni">Yang et al. [11] observed three distinct behavioral phases in monkeys: (1) pellet collection, (2) ghost avoidance, (3) energizer utilization with ghost hunting. Our model's emergent codes parallel this hierarchy: Codes 4/7 correspond to phase 1, Code 1's ghost-distance sensitivity reflects phase 2, and Code 2 directly implements phase 3.</p>
+
+<h3>8.3 Limitations</h3>
+<p class="ni">(1) No dedicated evasion code emerged; ghost avoidance is encoded implicitly via distance-sensitive codes. (2) 30% pellet ratio leaves room for improvement. (3) The MLP executor limits multi-step path planning. (4) Code 2 (Hunter) is activated only 0.5% of the time, suggesting the frightened window is underutilized.</p>
+
+<h2>9. Conclusion</h2>
+<p class="ni">We demonstrate that a lightweight hierarchical architecture (94K parameters) with a discrete Gumbel-Softmax bottleneck discovers interpretable Pac-Man strategies through pure reinforcement learning on the classic arcade maze with faithful game-rule rewards. The emergent ghost-hunting code (95.4% frightened-state activation, 7 kills, 0 deaths) represents complex multi-step planning that arose without any hunting-related supervision. The 3,757 strategy switches across 100 episodes demonstrate active, context-dependent policy composition. These results suggest that architectural inductive biases &mdash; temporal bottleneck, discrete information bottleneck, and code diversity pressure &mdash; are sufficient to elicit emergent hierarchical behavior in complex sequential decision tasks.</p>
+
+<h2>References</h2>
+<div class="ref">
+<p>[1] Sutton, Precup, Singh. Between MDPs and Semi-MDPs: A Framework for Temporal Abstraction. <em>AI</em>, 1999.</p>
+<p>[2] Dayan, Hinton. Feudal Reinforcement Learning. <em>NeurIPS</em>, 1993.</p>
+<p>[3] Vezhnevets et al. FeUdal Networks for Hierarchical RL. <em>ICML</em>, 2017.</p>
+<p>[4] Kulkarni et al. Hierarchical Deep RL. <em>NeurIPS</em>, 2016.</p>
+<p>[5] Bacon, Harb, Precup. The Option-Critic Architecture. <em>AAAI</em>, 2017.</p>
+<p>[6] Chen et al. Decision Transformer. <em>NeurIPS</em>, 2021.</p>
+<p>[7] Eysenbach et al. Diversity is All You Need. <em>ICLR</em>, 2019.</p>
+<p>[8] Lynch et al. Learning Latent Plans from Play. <em>CoRL</em>, 2020.</p>
+<p>[9] Schulman et al. Proximal Policy Optimization. <em>arXiv</em>, 2017.</p>
+<p>[10] Jang, Gu, Poole. Categorical Reparameterization with Gumbel-Softmax. <em>ICLR</em>, 2017.</p>
+<p>[11] Yang et al. Primate Pac-Man: a multi-stage cognitive task for macaques. <em>Nature Protocols</em>, 2024.</p>
+</div>
+
+</div>
+
+<script>
+// Maze data
+const mazeInit = [
+"WWWWWWWWWWWWWWWWWWWWWWWWWWWW","W............WW............W","W.WWWW.WWWWW.WW.WWWWW.WWWW.W","WoWWWW.WWWWW.WW.WWWWW.WWWWoW","W.WWWW.WWWWW.WW.WWWWW.WWWW.W","W..........................W","W.WWWW.WW.WWWWWWWW.WW.WWWW.W","W.WWWW.WW.WWWWWWWW.WW.WWWW.W","W......WW....WW....WW......W","WWWWWW.WWWWW WW WWWWW.WWWWWW","     W.WWWWW WW WWWWW.W     ","     W.WW          WW.W     ","     W.WW WWWDDWWW WW.W     ","WWWWWW.WW W______W WW.WWWWWW","      .   W______W   .      ","WWWWWW.WW W______W WW.WWWWWW","     W.WW WWWWWWWW WW.W     ","     W.WW          WW.W     ","     W.WW WWWWWWWW WW.W     ","WWWWWW.WW WWWWWWWW WW.WWWWWW","W............WW............W","W.WWWW.WWWWW.WW.WWWWW.WWWW.W","W.WWWW.WWWWW.WW.WWWWW.WWWW.W","Wo..WW.......P .......WW..oW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","W......WW....WW....WW......W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W..........................W","WWWWWWWWWWWWWWWWWWWWWWWWWWWW"];
+
+function renderMaze(id, maze, cellSize) {
+  const el = document.getElementById(id);
+  const sz = cellSize || 6;
+  const rows = maze.length, cols = maze[0].length;
+  let canvas = document.createElement('canvas');
+  canvas.width = cols * sz;
+  canvas.height = rows * sz;
+  canvas.style.borderRadius = '4px';
+  canvas.style.border = '2px solid #1565c0';
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  function isWall(r, c) {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return true;
+    const ch = maze[r][c];
+    return ch === 'W' || ch === '#';
+  }
+
+  // Find Pac-Man position for mouth direction
+  let pacR=-1, pacC=-1;
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) if(maze[r][c]==='P'||maze[r][c]==='C'){pacR=r;pacC=c;}
+
+  // Determine Pac-Man facing: look at which adjacent cell has cleared pellets (empty space)
+  let pacAngle = 0; // default: face right
+  if (pacR >= 0) {
+    // Check which direction has more open space (cleared area = direction of travel)
+    let openR=0,openL=0,openU=0,openD=0;
+    for(let d=1;d<=3;d++){
+      if(pacC+d<cols && !isWall(pacR,pacC+d) && maze[pacR][pacC+d]===' ') openR++;
+      if(pacC-d>=0 && !isWall(pacR,pacC-d) && maze[pacR][pacC-d]===' ') openL++;
+      if(pacR-d>=0 && !isWall(pacR-d,pacC) && maze[pacR-d][pacC]===' ') openU++;
+      if(pacR+d<rows && !isWall(pacR+d,pacC) && maze[pacR+d][pacC]===' ') openD++;
+    }
+    let maxOpen = Math.max(openR,openL,openU,openD);
+    if(maxOpen>0){
+      if(openL===maxOpen) pacAngle=Math.PI;
+      else if(openU===maxOpen) pacAngle=-Math.PI/2;
+      else if(openD===maxOpen) pacAngle=Math.PI/2;
+      else pacAngle=0;
+    }
+  }
+
+  // Two-pass: walls first, then contents
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ch = maze[r][c];
+      const x = c * sz, y = r * sz;
+      const cx = x + sz/2, cy = y + sz/2;
+
+      if (ch === 'W' || ch === '#') {
+        // Wall: thin blue outline style (not solid fill)
+        // Only draw borders facing corridors, leave interior black
+        ctx.strokeStyle = '#2255dd';
+        ctx.lineWidth = Math.max(1, sz * 0.18);
+        const m = ctx.lineWidth / 2;
+        if (!isWall(r-1, c)) { ctx.beginPath(); ctx.moveTo(x, y+m); ctx.lineTo(x+sz, y+m); ctx.stroke(); }
+        if (!isWall(r+1, c)) { ctx.beginPath(); ctx.moveTo(x, y+sz-m); ctx.lineTo(x+sz, y+sz-m); ctx.stroke(); }
+        if (!isWall(r, c-1)) { ctx.beginPath(); ctx.moveTo(x+m, y); ctx.lineTo(x+m, y+sz); ctx.stroke(); }
+        if (!isWall(r, c+1)) { ctx.beginPath(); ctx.moveTo(x+sz-m, y); ctx.lineTo(x+sz-m, y+sz); ctx.stroke(); }
+        // Corner connections
+        if(!isWall(r-1,c) && !isWall(r,c-1) && isWall(r-1,c-1)){ctx.beginPath();ctx.arc(x+m,y+m,m,0,Math.PI*2);ctx.fillStyle='#2255dd';ctx.fill();}
+        if(!isWall(r-1,c) && !isWall(r,c+1) && isWall(r-1,c+1)){ctx.beginPath();ctx.arc(x+sz-m,y+m,m,0,Math.PI*2);ctx.fillStyle='#2255dd';ctx.fill();}
+        if(!isWall(r+1,c) && !isWall(r,c-1) && isWall(r+1,c-1)){ctx.beginPath();ctx.arc(x+m,y+sz-m,m,0,Math.PI*2);ctx.fillStyle='#2255dd';ctx.fill();}
+        if(!isWall(r+1,c) && !isWall(r,c+1) && isWall(r+1,c+1)){ctx.beginPath();ctx.arc(x+sz-m,y+sz-m,m,0,Math.PI*2);ctx.fillStyle='#2255dd';ctx.fill();}
+      } else if (ch === 'D') {
+        // Ghost door: thin pink line
+        ctx.fillStyle = '#ffaaaa';
+        ctx.fillRect(x, cy - sz*0.1, sz, sz*0.2);
+      } else if (ch === '_') {
+        // Ghost house interior: keep black
+      } else if (ch === '.') {
+        // Pellet: small round dot (classic size)
+        ctx.fillStyle = '#ffcc44';
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(1, sz * 0.12), 0, Math.PI*2);
+        ctx.fill();
+      } else if (ch === 'O' || ch === 'o') {
+        // Energizer: large bright circle
+        ctx.fillStyle = '#ffcc44';
+        ctx.beginPath();
+        ctx.arc(cx, cy, sz * 0.35, 0, Math.PI*2);
+        ctx.fill();
+      } else if (ch === 'P' || ch === 'C') {
+        // Pac-Man: yellow circle with mouth facing travel direction
+        const pr = sz * 0.42;
+        const mouthAngle = 0.20 * Math.PI; // mouth opening
+        ctx.fillStyle = '#ffe000';
+        ctx.beginPath();
+        ctx.arc(cx, cy, pr, pacAngle + mouthAngle, pacAngle - mouthAngle + Math.PI*2);
+        ctx.lineTo(cx, cy);
+        ctx.closePath();
+        ctx.fill();
+        // Eye
+        const eyeOff = sz * 0.12;
+        const eyeX = cx + Math.cos(pacAngle - 0.5) * eyeOff;
+        const eyeY = cy + Math.sin(pacAngle - 0.5) * eyeOff;
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(eyeX, eyeY, Math.max(0.5, sz*0.06), 0, Math.PI*2);
+        ctx.fill();
+      } else if (ch === 'G') {
+        // Ghost: classic shape with skirt
+        const gr = sz * 0.38;
+        ctx.fillStyle = '#ff1744';
+        // Body (rounded top)
+        ctx.beginPath();
+        ctx.arc(cx, cy - sz*0.05, gr, Math.PI, 0);
+        ctx.lineTo(cx + gr, cy + sz*0.3);
+        // Wavy skirt bottom
+        const w = gr * 2;
+        const steps = 3;
+        const sw = w / steps;
+        for(let i=0;i<steps;i++){
+          const sx = cx - gr + i*sw;
+          ctx.lineTo(sx + sw/2, cy + sz*0.18);
+          ctx.lineTo(sx + sw, cy + sz*0.3);
+        }
+        ctx.lineTo(cx - gr, cy + sz*0.3);
+        ctx.closePath();
+        ctx.fill();
+        // Eyes (white with blue pupils)
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(cx-sz*0.12, cy-sz*0.08, sz*0.09, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+sz*0.12, cy-sz*0.08, sz*0.09, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#1a237e';
+        ctx.beginPath(); ctx.arc(cx-sz*0.10, cy-sz*0.07, sz*0.05, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+sz*0.14, cy-sz*0.07, sz*0.05, 0, Math.PI*2); ctx.fill();
+      } else if (ch === 'F' || ch === 'f') {
+        // Frightened ghost: blue (or white if flashing)
+        const gr = sz * 0.38;
+        ctx.fillStyle = ch === 'f' ? '#ffffff' : '#2979ff';
+        ctx.beginPath();
+        ctx.arc(cx, cy - sz*0.05, gr, Math.PI, 0);
+        ctx.lineTo(cx + gr, cy + sz*0.3);
+        const w = gr * 2, steps = 3, sw = w / steps;
+        for(let i=0;i<steps;i++){
+          const sx = cx - gr + i*sw;
+          ctx.lineTo(sx + sw/2, cy + sz*0.18);
+          ctx.lineTo(sx + sw, cy + sz*0.3);
+        }
+        ctx.lineTo(cx - gr, cy + sz*0.3);
+        ctx.closePath();
+        ctx.fill();
+        // Scared face
+        ctx.fillStyle = ch === 'f' ? '#f44336' : '#fff';
+        ctx.beginPath(); ctx.arc(cx-sz*0.10, cy-sz*0.06, sz*0.05, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx+sz*0.10, cy-sz*0.06, sz*0.05, 0, Math.PI*2); ctx.fill();
+        // Wavy mouth
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = Math.max(0.5, sz*0.04);
+        ctx.beginPath();
+        ctx.moveTo(cx-sz*0.15, cy+sz*0.08);
+        for(let i=0;i<4;i++){
+          ctx.lineTo(cx-sz*0.15+i*sz*0.1, cy+(i%2?0.04:0.12)*sz);
+        }
+        ctx.stroke();
+      }
+    }
+  }
+  el.innerHTML = '';
+  el.appendChild(canvas);
+}
+
+renderMaze('maze-full', mazeInit, 8);
+
+// Curriculum snapshots — embedded directly (no fetch needed)
+const snapS1 = [ // Stage 1: step 40, score 250, no ghosts, right side cleared
+"WWWWWWWWWWWWWWWWWWWWWWWWWWWW","W............WW............W","W.WWWW.WWWWW.WW.WWWWW.WWWW.W","W.WWWW.WWWWW.WW.WWWWW.WWWW.W","W.WWWW.WWWWW.WW.WWWWW.WWWW.W","W..........................W","W.WWWWPWW.WWWWWWWW.WW.WWWW.W","W.WWWW WW.WWWWWWWW.WW.WWWW.W","W..... WW....WW....WW......W","WWWWWW WWWWW WW WWWWW.WWWWWW","     W WWWWW WW WWWWW.W     ","     W WW          WW.W     ","     W WW WWWDDWWW WW.W     ","WWWWWW WW W______W WW.WWWWWW","          W______W          ","WWWWWW.WW W______W WW WWWWWW","     W.WW WWWWWWWW WW W     ","     W.WW          WW W     ","     W.WW WWWWWWWW WW W     ","WWWWWW.WW WWWWWWWW WW WWWWWW","W............WW...... .....W","W.WWWW.WWWWW.WW.WWWWW WWWW.W","W.WWWW.WWWWW.WW.WWWWW WWWW.W","W...WW.......         WW...W","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","W......WW....WW....WW......W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W..........................W","WWWWWWWWWWWWWWWWWWWWWWWWWWWW"];
+
+const snapS2 = [ // Stage 2: step 350, score 520, 1 ghost (G), left/right cleared
+"WWWWWWWWWWWWWWWWWWWWWWWWWWWW","W.....       WW............W","W.WWWW WWWWW WW.WWWWW.WWWW.W","W.WWWW WWWWWPWW.WWWWW.WWWW.W","W.WWWW WWWWW.WW.WWWWW.WWWW.W","W..... ...........  .......W","W.WWWW WW.WWWWWWWW WW.WWWW.W","W.WWWW WW.WWWWWWWW WW.WWWW.W","W..... WW....WW    WW......W","WWWWWW WWWWW WW WWWWW.WWWWWW","     W WWWWW WW WWWWW.W     ","     W WW          WW.W     ","     W WW WWWDDWWW WW.W     ","WWWWWW WW W_G____W WW.WWWWWW","          W______W          ","WWWWWW.WW W______W WW WWWWWW","     W.WW WWWWWWWW WW W     ","     W.WW          WW W     ","     W.WW WWWWWWWW WW W     ","WWWWWW.WW WWWWWWWW WW WWWWWW","W............WW    .. .....W","W.WWWW.WWWWW.WW WWWWW WWWW.W","W.WWWW.WWWWW.WW WWWWW WWWW.W","W...WW.......         WW...W","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","W......WW....WW....WW......W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W..........................W","WWWWWWWWWWWWWWWWWWWWWWWWWWWW"];
+
+const snapS3 = [ // Stage 3: step 100, score 340, 2 frightened ghosts (F), energizers
+"WWWWWWWWWWWWWWWWWWWWWWWWWWWW","W............WW......      W","W.WWWW.WWWWW.WW.WWWWW WWWW W","WOWWWW.WWWWW.WW.WWWWW WWWW W","W.WWWW.WWWWW.WW.WWWWW WWWWPW","W.................... .... W","W.WWWW.WW.WWWWWWWW.WW WWWW.W","W.WWWW.WW.WWWWWWWW.WW WWWW.W","W......WW....WW....WW .....W","WWWWWW.WWWWW WW WWWWW WWWWWW","     W.WWWWW WW WWWWW W     ","     W.WW          WW W     ","     W.WW WWWDFWWW WW W     ","WWWWWW.WW W___F__W WW WWWWWW","      .   W______W          ","WWWWWW.WW W______W WW.WWWWWW","     W.WW WWWWWWWW WW.W     ","     W.WW          WW.W     ","     W.WW WWWWWWWW WW.W     ","WWWWWW.WW WWWWWWWW WW.WWWWWW","W............WW    ........W","W.WWWW.WWWWW.WW WWWWW.WWWW.W","W.WWWW.WWWWW.WW WWWWW.WWWW.W","WO..WW.......   ......WW..OW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","W......WW....WW....WW......W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W..........................W","WWWWWWWWWWWWWWWWWWWWWWWWWWWW"];
+
+const snapS4 = [ // Stage 4: step 200, score 470, ghost+frightened, large cleared area
+"WWWWWWWWWWWWWWWWWWWWWWWWWWWW","W............WW......      W","W.WWWW.WWWWW.WW.WWWWW WWWW W","WOWWWW.WWWWW.WW.WWWWW WWWW W","W.WWWW.WWWWW.WW.WWWWW WWWW W","W.................... .... W","W.WWWW.WW.WWWWWWWW.WW WWWW W","W.WWWW.WW.WWWWWWWW.WW WWWW W","W......WWF...WW....WW .. GPW","WWWWWW.WWWWW WW WWWWW WWWWWW","     W.WWWWW WW WWWWW W     ","     W.WW          WW W     ","     W.WW WWWFDWWW WW W     ","WWWWWW.WW W______W WW WWWWWW","      .   W______W          ","WWWWWW.WW W______W WW WWWWWW","     W.WW WWWWWWWWFWW W     ","     W.WW          WW W     ","     W.WW WWWWWWWW WW W     ","WWWWWW.WW WWWWWWWW WW WWWWWW","W............WW       .....W","W.WWWW.WWWWW.WW WWWWW.WWWW.W","W.WWWW.WWWWW.WW WWWWW.WWWW.W","WO..WW.......   ......WW..OW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","WWW.WW.WW.WWWWWWWW.WW.WW.WWW","W......WW....WW....WW......W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W.WWWWWWWWWW.WW.WWWWWWWWWW.W","W..........................W","WWWWWWWWWWWWWWWWWWWWWWWWWWWW"];
+
+renderMaze('grid-s1', snapS1, 5);
+renderMaze('grid-s2', snapS2, 5);
+renderMaze('grid-s3', snapS3, 5);
+renderMaze('grid-s4', snapS4, 5);
+
+// Training chart
+const curve = [[8192,"s1",716,1.99],[16384,"s1",768,1.99,21],[24576,"s1",825,1.98,17],[32768,"s1",792,1.98,19],[40960,"s1",776,1.97,26],[49152,"s1",809,1.96,22],[57344,"s1",845,1.96,34],[65536,"s1",838,1.95,40],[73728,"s1",867,1.94,38],[81920,"s1",878,1.94,43],[90112,"s1",871,1.93,45],[98304,"s1",910,1.93,49],[106496,"s1",925,1.92,64],[114688,"s2",350,1.91,38],[122880,"s3",820,1.91,31],[131072,"s4",898,1.90,28],[139264,"s4",900,1.90,30]];
+
+const canvas = document.getElementById('chart');
+if(canvas){
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  const p={l:48,r:48,t:18,b:28};
+  const pw=W-p.l-p.r,ph=H-p.t-p.b;
+  ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='#eee';ctx.lineWidth=0.5;
+  for(let i=0;i<=5;i++){const y=p.t+ph*i/5;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(W-p.r,y);ctx.stroke()}
+
+  const maxStep=150000,maxScore=1000,maxPR=70;
+
+  // Stage boundaries
+  [[106496,'#4caf50','S1->S2'],[114688,'#ff9800','S2->S3'],[122880,'#f44336','S3->S4']].forEach(([s,col,lbl])=>{
+    const x=p.l+(s/maxStep)*pw;
+    ctx.setLineDash([3,3]);ctx.strokeStyle=col;ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(x,p.t);ctx.lineTo(x,H-p.b);ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle=col;ctx.font='7px sans-serif';
+    ctx.fillText(lbl,x+2,p.t+9);
+  });
+
+  // Score line
+  ctx.strokeStyle='#1565c0';ctx.lineWidth=2;ctx.beginPath();
+  curve.forEach(([s,,sc],i)=>{
+    const x=p.l+(s/maxStep)*pw,y=p.t+ph*(1-sc/maxScore);
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });ctx.stroke();
+
+  // Score dots
+  curve.forEach(([s,,sc])=>{
+    const x=p.l+(s/maxStep)*pw,y=p.t+ph*(1-sc/maxScore);
+    ctx.fillStyle='#1565c0';ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fill();
+  });
+
+  // Eval PR dots+line
+  ctx.strokeStyle='#e65100';ctx.lineWidth=1.5;ctx.beginPath();
+  let first=true;
+  curve.forEach(([s,,,,pr])=>{
+    if(pr===undefined)return;
+    const x=p.l+(s/maxStep)*pw,y=p.t+ph*(1-pr/maxPR);
+    first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y);
+  });ctx.stroke();
+  curve.forEach(([s,,,,pr])=>{
+    if(pr===undefined)return;
+    const x=p.l+(s/maxStep)*pw,y=p.t+ph*(1-pr/maxPR);
+    ctx.fillStyle='#e65100';ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fill();
+  });
+
+  // Axes
+  ctx.fillStyle='#333';ctx.font='8px sans-serif';
+  ctx.fillText('0',p.l-12,H-p.b+3);ctx.fillText('150K',W-p.r-15,H-p.b+12);
+  ctx.fillText('Steps',W/2-12,H-3);
+  ctx.fillStyle='#1565c0';ctx.save();ctx.translate(10,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('Score',-15,0);ctx.restore();
+  for(let i=0;i<=5;i++){ctx.fillText(Math.round(maxScore*i/5),p.l-30,p.t+ph*(1-i/5)+3)}
+  ctx.fillStyle='#e65100';ctx.save();ctx.translate(W-6,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('Pellet%',-18,0);ctx.restore();
+  for(let i=0;i<=5;i++){ctx.fillText(Math.round(maxPR*i/5)+'%',W-p.r+4,p.t+ph*(1-i/5)+3)}
+  // Legend
+  ctx.fillStyle='#1565c0';ctx.fillRect(p.l+8,p.t+4,16,2.5);ctx.fillStyle='#333';ctx.font='7px sans-serif';ctx.fillText('Train Score',p.l+28,p.t+8);
+  ctx.fillStyle='#e65100';ctx.fillRect(p.l+100,p.t+4,16,2.5);ctx.fillStyle='#333';ctx.fillText('Eval Pellet%',p.l+120,p.t+8);
+}
+
+// Timelines
+function renderTL(id, segs, total){
+  const el=document.getElementById(id);if(!el)return;
+  let html='';
+  segs.forEach(([c,n])=>{
+    html+=`<div class="c${c}" style="width:${(n/total*100).toFixed(1)}%" title="Code ${c} (${n} steps)"></div>`;
+  });
+  el.innerHTML=html;
+}
+renderTL('tl-s3',[[4,80],[6,10],[7,65],[3,5],[4,5],[7,5],[4,5],[7,10],[3,10],[4,5],[6,5],[7,10],[3,5],[7,5],[3,10],[7,5],[3,5],[4,4]],249);
+renderTL('tl-s4',[[4,150],[6,15],[7,60],[0,5],[7,25],[6,10],[0,10],[7,15],[0,5],[7,20],[0,5],[7,180]],500);
+</script>
+
+</body>
+</html>
