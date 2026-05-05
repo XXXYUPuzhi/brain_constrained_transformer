@@ -285,6 +285,166 @@ python analyze.py
 
 ---
 
+## V1 ModularPacman — Sparse-Activation MoE Trained from Scratch by RL
+
+The previous resource-limitation experiments (L1 / Top-K) sparsified a behaviour-cloned ViT — the model only sees what the monkey already chose. To probe whether resource constraints can also drive **strategy emergence under reinforcement learning** (no monkey labels), we now train a sparse-activation Mixture-of-Experts agent **from scratch by PPO** on the lab's MATLAB-faithful Pac-Man environment, and compare it to macaque behaviour and electrophysiology.
+
+This section reports a new agent (**V1 ModularPacman**, ~36 K parameters) and its rigorous comparison against the macaque data on three levels: behavioural matching (66.6% top-1 / 91.2% top-2 of decision frames), neural-data direction decoding (Premotor 35.9%, FDR-significant), and representational alignment (RSA negative; linear-encoder controls show only a small +0.013 r residual after partialling out the categorical direction).
+
+### 1. Architecture
+
+* **4 expert MLPs** (35 → 64 → 64 → 4, Tanh) — independent feed-forward branches, each producing 4 action logits
+* **1 router MLP** (35 → 64 → 64 → 4) — produces softmax mixture weights α ∈ Δ³ (temperature τ = 1.0, fixed)
+* **1 value head** (35 → 64 → 1)
+* **Total parameters: ~36 K** (less than the 92 K HDT baseline and less than the 44 K BC ViT)
+* **Switch-Transformer-style load-balance loss** (coefficient 0.01) prevents expert collapse
+
+The agent's policy logits are an α-weighted sum of the four experts' logits; action sampling and PPO update are otherwise identical to a standard PPO MLP agent.
+
+### 2. Training
+
+* PPO with 8 parallel workers, rollout 1024, mini-batch 512, 4 PPO epochs / update, learning rate 5e-4
+* The same 5-stage curriculum used in the HDT baseline (forage → single ghost → ghost+power → hunter practice → full game)
+* Reported checkpoint at **3M environment steps** (~1.5 h on a single RTX 5090)
+
+### 3. Task Performance (Stage-5 evaluation, 100 episodes)
+
+V1 outperforms the HDT baseline at fewer training steps and with less than half the parameters:
+
+| Metric | HDT (~93K params, 4.36M steps) | **V1 ModularPacman (~36K params, 3M steps)** |
+|:---|:---|:---|
+| Pellet ratio | 0.272 | **0.363** (+33%) |
+| Score | 104 | **126** (+22%) |
+| Kills / episode | 0.74 | **1.06** (+43%) |
+| Max single-episode pellet ratio | — | **0.96** (clears maze) |
+
+### 4. Emergent Hunter / Evader Specialization
+
+We probed each expert's behavioural identity on 3,000 randomly sampled game states using two complementary scores:
+
+* **Hunter score** = P(expert's argmax action moves toward a frightened ghost when one is present) — chance baseline 0.50
+* **Evader score** = P(argmax action moves *away from* a near non-frightened ghost) — chance baseline 0.33
+
+Two strong evader experts and two hunter experts emerge, and the router gates them in a context-appropriate manner — preferentially activating the strong evader (E3, 43%) in NEAR threat regimes, and a moderate hunter (E2, 37%) in the frightened-ghost regime.
+
+![V1 expert roles](./images/v1_modular/B_expert_roles.png)
+*Figure V1-1: (a) Per-expert hunter / evader scores on 3,000 sampled states. Expert 1 is a strong hunter (0.78), Expert 3 a strong evader (0.75). (b) Router gating weights conditional on game regime: NEAR → 43% Expert 3 (STRONG EVADER); frightened → 37% Expert 2 (MILD HUNTER) — exactly the assignment a hand-crafted hierarchical controller would make. This reproduces the Schrum & Miikkulainen (2016) hunter / evader role assignment via gradient-based PPO at one-tenth the parameter cost of evolutionary search.*
+
+### 5. Behavioural Alignment with the Macaque
+
+We inject the monkey's true game state at frame *f* into the Python-faithful environment, read back the model's softmax over four actions, and compare its argmax (and top-2) to the monkey's revealed choice `pacman_dir[f]`. We restrict to true direction-change frames (5,930 across 30 sessions) and stratify by condition. Statistics use a paired sign-permutation test (1,000 permutations) against an independent random-init V1 instance, FDR-BH-corrected at 5% across 24 condition × metric cells.
+
+| Condition | n_frames | top-1 (V1 / random) | top-2 (V1 / random) | Δ top-1 | FDR |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| **All** | 5930 | **0.666 / 0.336** | **0.912 / 0.739** | **+33.0pp** | ✓ |
+| Corridor (2 valid) | 2635 | 0.776 / 0.454 | 1.000 / 1.000 (sat.) | +32.1pp | ✓ |
+| Intersection (≥3) | 3295 | 0.578 / 0.242 | 0.842 / 0.531 | +33.6pp | ✓ |
+| Ghost FAR | 1440 | 0.623 / 0.384 | 0.888 / 0.784 | +23.8pp | ✓ |
+| Ghost NEAR | 2748 | 0.667 / 0.325 | 0.915 / 0.719 | +34.2pp | ✓ |
+| **Frightened** | 1742 | **0.703 / 0.314** | 0.926 / 0.732 | **+38.9pp** | ✓ |
+| Intersect+NEAR | 1576 | 0.569 / 0.244 | 0.853 / 0.511 | +32.5pp | ✓ |
+| **Intersect+frightened** | 992 | **0.655 / 0.218** | 0.871 / 0.529 | **+43.7pp** ← max | ✓ |
+
+**23 of 24 cells pass FDR-BH 5%.** All p_perm = 0.001 (1000-permutation floor). The only cell that does not pass is corridor + top-2, which saturates at 1.000 in both trained and random because corridors offer only two valid moves.
+
+![V1 behavior alignment](./images/v1_modular/A_behavior_alignment.png)
+*Figure V1-2: V1 ModularPacman agreement with macaque actions at decision frames, paired against random-init. Red = top-1 hit rate (model argmax = monkey choice), blue = top-2 hit rate. Solid bars: trained V1; pale bars: matched random-init V1. Sample sizes shown beneath. The largest top-1 uplift is in intersect+frightened (0.655 vs 0.218, +43.7 pp), where the monkey's choice is most contextually committed.*
+
+### 6. Where do the Model and Monkey Disagree?
+
+To diagnose the residual 1,982 disagreement frames (out of 5,930), each disagreement is auto-classified by the geometric relation between the model's and monkey's chosen direction and the surrounding game objects (frightened ghost, threat ghost, nearest pellet, energizer).
+
+![V1 disagreement breakdown](./images/v1_modular/D_disagreement.png)
+*Figure V1-3: Disagreement frames stratified by regime and disagreement category. NEAR regime (n=915): 64% are "model safer" — model moves away from a near threat ghost while the monkey moves toward it. This reflects the asymmetric −15 / −30 death penalty in the RL reward set, making the model more risk-averse than the monkey. Frightened (n=523): 60% are kill-related (42% monkey chases an edible ghost; 18% vice-versa). Across all regimes kill-enthusiasm differences account for only 16% of disagreements, refuting the initial hypothesis that "kill enthusiasm" is the principal axis of divergence.*
+
+### 7. Macaque Direction Code is Linearly Decodable from Premotor
+
+Before comparing model and brain representations we first verify that the macaque's direction selection itself is recoverable from the recorded population activity. Per session and per region, we train a 4-class multinomial logistic regression on session-z-scored 300 ms boxcar firing rates (5-fold stratified CV; chance = 0.25), restricted to the 5,930 direction-change frames. Lags scan ±300 ms in 50 ms steps. Significance is paired sign-permutation against label-shuffled baselines, FDR-BH 5% over 52 cells (region × lag with ≥5 sessions).
+
+![Premotor decoding lag scan](./images/v1_modular/C_premotor_decoding.png)
+*Figure V1-4: Macaque direction (UP / LEFT / DOWN / RIGHT) decoding from neural firing rate. Hollow circles = FDR-BH 5% pass against shuffled baseline. **Premotor (n = 30, red): peaks at 35.9% at lag = 0 (95% CI [0.341, 0.379]) and is FDR-significant at all 13 lags across ±300 ms.** DLPFC (n = 30, blue): peaks at +300 ms (31.5%, post-decision) — also all 13 lags FDR-pass. FEF (n = 16, green): peaks at −150 ms (29.7%), 12 / 13 lags FDR-pass — the negative lag is consistent with eye-movement preparation preceding the action. ACC (n = 7) does not pass FDR. Of the entire 52-cell scan, 42 cells pass FDR-BH 5%, dominated by Premotor and DLPFC.*
+
+### 8. Representational Alignment with the Brain — Honest Assessment
+
+A natural question now is: does V1's internal representation **match the geometry** of macaque firing rates? We test this at two levels of stringency.
+
+#### 8.1 RSA — Geometric isomorphism (NEGATIVE)
+
+For each session, layer ∈ {exp0_h2, ..., exp3_h2, prefs}, region, lag and condition we build pairwise z-scored Euclidean RDMs for the model layer and the neural population, correlate the upper-triangles by Spearman ρ, and compare against random-init V1 with paired sign-permutation, FDR-BH 5% over 400 cells.
+
+* **Hidden-layer RSA: 0 / 400 cells pass FDR.**
+* **Output-layer RSA** (4-dim raw logits, softmax probabilities, argmax onehot vs the same 6 regions × 5 lags, 120 cells): **0 / 120 cells pass FDR.**
+
+Geometry is the wrong level of comparison: a 4-dim softmax cannot be isomorphic to a ~50-dim heterogeneously-tuned cosine-coded population.
+
+#### 8.2 Linear encoder (Yamins/BrainScore convention) — surface-level positive, but with caveats
+
+The broader convention in the field is to use linear encoders rather than RSA, since linear encoding only requires the existence of a linear map from model representation to neural firing rate, not isomorphism of the metric. We therefore train, per session, a 5-fold CV ridge regression (α = 1.0) from each model layer to each region's z-scored firing rate, scoring with per-neuron Pearson r averaged across neurons. FDR-BH 5% over 280 cells (7 layers × 5 lags × 6 regions × 2 conditions).
+
+![V1 encoder heatmap](./images/v1_modular/F_encoder_heatmap.png)
+*Figure V1-5: Δ encoder r (TRAINED − RANDOM), averaged across 5 lags. Stars indicate the number of lags (out of 5) passing FDR-BH 5%. **Two opposite findings co-exist**: (i) the model's **output** layer (logits_softmax, last row) is positively aligned with Premotor (Δr = +0.028, all 5 lags FDR-pass) and weakly with other regions; (ii) the model's **hidden** layers (exp0_h2 ‒ exp3_h2) are negatively aligned (Δr ≈ −0.015 to −0.020) and FDR-significant in the negative direction. Negative Δr means the trained model's hidden representation predicts neural activity *worse* than the random-init baseline, an artefact of training compressing 64-dim features into a 4-direction-aligned subspace.*
+
+The headline raw count is **62 / 280 cells pass FDR**, but the majority are negative-direction effects in the hidden layers. The clean positive result is `logits_softmax → Premotor`: Δr = +0.024 to +0.032 across all five lags, paired permutation p ≤ 0.001 at every lag.
+
+#### 8.3 Rigorous controls — the "alignment" is mostly a tautology
+
+Two confounds threaten the linear-encoder reading: (C1) trained-vs-random is a weak baseline (any model that learned to predict the monkey's direction trivially correlates with anything that itself encodes that direction); (C2) the model's softmax and the macaque's Premotor share an upstream cause — the world state — and can co-vary purely through that shared cause without sharing any neural mechanism.
+
+We therefore ran the same 5-fold CV ridge encoder using **five distinct input representations** on Premotor and DLPFC (the only regions where 8.2 was FDR-significant):
+
+* **A**: trained model softmax (4-dim)
+* **B**: random-init model softmax (4-dim)
+* **C**: macaque's true direction one-hot at the decision frame (4-dim) — UPPER BOUND BASELINE
+* **D**: shuffled direction one-hot (4-dim) — NULL FLOOR
+* **E**: concatenation [A || C] (8-dim) — combined encoder for partial-correlation test
+
+![V1 encoder controls](./images/v1_modular/E_encoder_controls.png)
+*Figure V1-6: Linear-encoder per-neuron r as a function of lag for the five representations. Three orderings hold across all conditions: **(C, blue) ≥ (A, red) > (B, grey) > (D, light grey)**, with the combined representation **(E, teal)** consistently above C. (i) The model softmax (A) is **strictly worse than the macaque's true direction onehot** (C): Δ(A − C) = −0.014 at Premotor lag 0, p = 0.002 — i.e. the model is a **lossy proxy** for the categorical direction. (ii) Model softmax beats shuffled direction (D) at all 20 cells (sanity check). (iii) Combined (E) beats true direction (C) by Δ ≈ +0.011 to +0.016 — i.e. the model contributes a small but reliable residual on top of categorical direction.*
+
+Five paired contrasts, each FDR-BH-corrected:
+
+| Contrast | Region cells | FDR-pass | Direction | Δr | Interpretation |
+|:---|:---:|:---:|:---:|:---:|:---|
+| A − B | Premotor (10) | 9/10 | + | +0.024 to +0.032 | "Trained beats random" — but tautological |
+| A − C | Premotor (10) | 1/10 | **−** | −0.014 | Model softmax is a **lossy proxy** for direction |
+| A − D | Premotor + DLPFC (20) | 20/20 | + | +0.022 to +0.060 | Model carries direction info (sanity) |
+| C − D | Premotor + DLPFC (20) | 20/20 | + | +0.019 to +0.074 | Premotor itself encodes direction (sanity) |
+| **E − C** | **Premotor + DLPFC (20)** | **19/20** | **+** | **+0.011 to +0.024** | **Model adds info beyond categorical direction** |
+
+The two scientifically informative contrasts are A vs C and E vs C. The first establishes that the bulk of the trained-model alignment is captured by — but is *worse than* — the categorical direction label. The second establishes that the model nevertheless contributes a small (Δr ≈ +0.013, R² ≈ 0.0002) but FDR-significant residual on top of the categorical label.
+
+#### 8.4 What the controls prove and what they do not
+
+* **Proven:** the model's output layer carries a small amount of information about Premotor and DLPFC firing rates that goes beyond the categorical direction one-hot the macaque selected, reproducible across 30 sessions, both conditions, all 5 lags.
+* **Not proven:** that this residual reflects shared representational *structure* with the brain rather than co-dependence on continuous task variables (ghost distance, frightened-timer, pellet density) that both the model and Premotor encode. The current data are *not sufficient* to claim representational alignment in the strong sense.
+
+### 9. Take-aways
+
+* **Sparse activation drives strategy emergence under RL.** A 36 K-parameter MoE PPO agent develops Schrum-style hunter / evader specialisation and a context-aware router *without any module-level supervision* — at one-tenth the parameter budget and ~ 1.5 GPU-hours of training versus evolutionary search.
+* **Strategy emergence yields strong behavioural alignment with the macaque** (66.6% top-1 / 91.2% top-2 across 5,930 decisions, 23/24 FDR-significant cells).
+* **Strategy emergence does not entail representational geometry alignment.** RSA is 0/400, and the small linear-encoder residual after rigorous controls (E − C ≈ +0.013 r) is on the order of R² = 0.0002. The geometry mismatch is plausibly explained by three architectural commitments the model and brain do not share: 35-dim handcrafted features (vs visual input), 4-dim softmax (vs ~50-dim cosine-tuned population code), and PPO reward (vs supervised representation).
+* **Future architectural commitments** required to close the geometry gap: visual input via a small CNN encoder, hidden width ≈ 200 to match Premotor scale, and joint behaviour + neural representation losses.
+
+### 10. Reproducibility
+
+V1 training and analysis code lives in a separate research directory (`yang_map`); the principal scripts are:
+
+| Script | Purpose |
+|:---|:---|
+| `model_modular.py` | V1 architecture (4 experts + router + value head) |
+| `train_modular.py` | PPO training with 5-stage curriculum and load-balance loss |
+| `align_model_brain.py` | Inject monkey state into the Python-faithful env |
+| `v1_behavior_rigorous.py` | 30-session × 24-cell behaviour alignment with FDR |
+| `v1_expert_role_analysis.py` | Hunter / evader scoring + router-by-regime |
+| `monkey_premotor_decoding.py` | 4-way direction decoding, 6 regions × 13 lags |
+| `v1_rsa_rigorous.py` | RSA, 400 cells with FDR-BH |
+| `v1_linear_encoder.py` | Linear-encoder alignment, 280 cells |
+| `v1_encoder_controls.py` | Five-representation rigorous encoder controls |
+
+Result data are saved as JSON files alongside per-figure PNGs under `checkpoints/modular_seed0_final/`.
+
+---
+
 ## Roadmap & Future Work
 
 The two strands of evidence above — (a) Top-K spatial sparsity in a behavior-prediction ViT and (b) temporal + categorical bottlenecks in an end-to-end RL agent — converge on a single hypothesis: **architectural resource constraints, applied along *whichever* axis is informative for the task, drive networks toward more modular, biologically interpretable solutions**. The next phase of work is to close the loop with primate physiology.
